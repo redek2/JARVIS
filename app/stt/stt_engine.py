@@ -9,7 +9,6 @@ class STTEngine:
             compute_type="int8", 
             cpu_threads=4
         )
-        return None
     
     def transcribe_audio(self, audio_data):
         segments, info = self.model.transcribe(audio_data, beam_size=5, language="pl", vad_filter=True)
