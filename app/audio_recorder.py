@@ -38,13 +38,12 @@ class AudioRecorder:
             self.silence_counter = 0.0
         else:
             # Jeśli funkcja zwróciła pustą listę – mamy ciszę
-            if self.speech_started:
-                chunk_duration = CHUNK_SIZE / SAMPLE_RATE
-                self.silence_counter += chunk_duration
+            chunk_duration = CHUNK_SIZE / SAMPLE_RATE
+            self.silence_counter += chunk_duration
 
-                if self.silence_counter >= VAD_SILENCE_DURATION:
-                    print(f"{Fore.CYAN}[SYSTEM]: Wykryto koniec wypowiedzi (cisza).{Style.RESET_ALL}")
-                    self.is_recording = False
+            if self.silence_counter >= VAD_SILENCE_DURATION:
+                print(f"{Fore.CYAN}[SYSTEM]: Wykryto koniec wypowiedzi (cisza).{Style.RESET_ALL}")
+                self.is_recording = False
 
     def stop_recording(self):
         self.is_recording = False

@@ -20,6 +20,8 @@ class TTSEngine:
         self.tts = sherpa_onnx.OfflineTts(config)
 
     def ttsInference(self, textToRead):
+        if not textToRead or not textToRead.strip() or len(textToRead.strip()) <= 1:
+            return
         
         audio = self.tts.generate(text=textToRead,
                              sid=0,

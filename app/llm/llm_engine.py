@@ -11,8 +11,12 @@ class LLMEngine:
         )
 
         # Wywołanie modelu
-        requests.post(OLLAMA_URL, json={"model": LLM_MODEL, "keep_alive": -1})
-
+        try:
+            native_url = OLLAMA_URL.replace("/v1", "/api/generate")
+            requests.post(native_url, json={"model": LLM_MODEL, "prompt": "", "keep_alive": -1}, timeout=10)
+        except Exception as e:
+            print(f"Nie udało się załadować modelu na starcie: {e}")
+            
         self.history = [
             {
                 "role": "system",
@@ -41,8 +45,8 @@ class LLMEngine:
         if full_response:
             self.history.append({"role": "assistant", "content": full_response})
 
-    def __del__(self):
+    def cleanup(self):
         try:
-            requests.post(OLLAMA_URL, json={"model": LLM_MODEL, "keep_alive": 0})
-        except Exception:
-            pass
+            response = requests.post(OLLAMA_URL.replace("/v1", "/api/generate"), json={"model": LLM_MODEL, "keep_alive": 0})
+        except Exception as e:
+            print(f"Błąd podczas zwalniania VRAM: {e}")
