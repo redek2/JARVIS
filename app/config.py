@@ -8,7 +8,7 @@ STT_MODEL_SIZE = "small"
 
 # LLM (OLLAMA)
 OLLAMA_URL = "http://localhost:11434/v1"
-LLM_MODEL = "SpeakLeash/bielik-minitron-7B-v3.0-instruct:Q4_K_M"
+LLM_MODEL = "jarvis2"
 
 # VAD
 VAD_THRESHOLD = 0.5

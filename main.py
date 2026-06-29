@@ -10,6 +10,7 @@ from colorama import init, Fore, Style
 import numpy as np
 import queue
 import re
+import random
 
 def recording_worker(recorder, stream):
     while recorder.is_recording and stream.active:
@@ -71,10 +72,12 @@ def main():
                 else:
                     continue
 
-            endings = ["bywaj", "żegnaj", "koniec rozmowy", "dobranoc"]
+            endings = ["bywaj", "żegnaj", "koniec rozmowy", "dobranoc", "dobra noc", "kończę", "kończymy", "żegnam", "adios"]
             if text_result.strip(" .!?\n").lower() in endings:
                 print(f"[Użytkownik]: {text_result}")
-                tts.ttsInference("Żegnam pana!")
+                byebye = ["Siemano!", "Do zobaczenia!", "Trzymaj się!", "Cześć!", "Na razie!", "Pa!", "Bywaj!", "Żegnam Pana!", "Pozdrawiam",
+                          "Do ponownego zobaczenia!", "Kłaniam się nisko!", "Do następnego!", "Pomyślności!", "Wszystkiego dobrego!", "Z fartem!"]
+                tts.ttsInference(random.choice(byebye))
                 break
 
             print(f"\n[Użytkownik]: {text_result}")
@@ -94,11 +97,24 @@ def main():
                 sentence_buffer += token
 
                 if re.search(r'[.!?\n]\s*$', sentence_buffer):
-                    tts_queue.put(sentence_buffer)
+                    clean_sentence = re.sub(r'\{.*?\}', '', sentence_buffer, flags=re.DOTALL)
+                    clean_sentence = re.sub(r'<.*?>|\[.*?\]', '', clean_sentence)
+
+                    clean_sentence = clean_sentence.replace('**', "")
+                    clean_sentence = clean_sentence.replace('*', "")
+
+                    if clean_sentence.strip():
+                        tts_queue.put(clean_sentence)
+
                     sentence_buffer = ""
 
             if sentence_buffer.strip():
-                tts_queue.put(sentence_buffer)
+                clean_sentence = re.sub(r'\{.*?\}', '', sentence_buffer, flags=re.DOTALL)
+                clean_sentence = re.sub(r'<.*?>|\[.*?\]', '', clean_sentence)
+                clean_sentence = clean_sentence.replace('**', "").replace('*', "")
+
+                if clean_sentence.strip():
+                    tts_queue.put(sentence_buffer)
 
             tts_queue.put(None)
             print()
@@ -107,6 +123,7 @@ def main():
 
     except KeyboardInterrupt:
         sd.stop()
+        tts_queue = None
         print("\nPrzerwano działanie programu z klawiatury.")
     finally:
         if 'llm' in locals() or 'llm' in globals():
