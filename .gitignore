@@ -45,3 +45,5 @@ env/
 ### IDE (VS Code / PyCharm)
 .vscode/
 .idea/
+
+app/config.py

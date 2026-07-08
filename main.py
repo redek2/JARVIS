@@ -41,6 +41,7 @@ def main():
         print(f"\n{Fore.CYAN}[SYSTEM] System gotowy.{Style.RESET_ALL}")
         sd.play((np.linspace(0.3, 0.0, 4800, False) * np.sin(440 * np.linspace(0, 0.3, 4800, False) * 2 * np.pi)).astype(np.float32), 16000)
         silence_timer = 0
+        stop_event = threading.Event()
         while True:
             recorder.start_recording()
             with sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS, dtype='float32', blocksize=CHUNK_SIZE) as stream:
@@ -102,6 +103,7 @@ def main():
 
                     clean_sentence = clean_sentence.replace('**', "")
                     clean_sentence = clean_sentence.replace('*', "")
+                    clean_sentence = clean_sentence.replace('```', "")
 
                     if clean_sentence.strip():
                         tts_queue.put(clean_sentence)
@@ -124,6 +126,7 @@ def main():
     except KeyboardInterrupt:
         sd.stop()
         tts_queue = None
+        stop_event.set()
         print("\nPrzerwano działanie programu z klawiatury.")
     finally:
         if 'llm' in locals() or 'llm' in globals():
