@@ -5,12 +5,14 @@ import sounddevice as sd
 from app.config import SAMPLE_RATE, CHANNELS, CHUNK_SIZE, OLLAMA_URL, LLM_MODEL
 from app.llm.llm_engine import LLMEngine
 from app.tts.tts_engine import TTSEngine
+from app.logger import get_logger
 import time
-from colorama import init, Fore, Style
 import numpy as np
 import queue
 import re
 import random
+
+logger = get_logger(__name__)
 
 def recording_worker(recorder, stream):
     while recorder.is_recording and stream.active:
@@ -30,18 +32,16 @@ def tts_worker(tts_engine, tts_queue):
         tts_queue.task_done()
 
 def main():
-    init(autoreset=True)
-
     recorder = AudioRecorder()
     stt = STTEngine()
     llm = LLMEngine()
     tts = TTSEngine()
+    tts_queue = None
 
     try:
-        print(f"\n{Fore.CYAN}[SYSTEM] System gotowy.{Style.RESET_ALL}")
+        logger.info("System gotowy.")
         sd.play((np.linspace(0.3, 0.0, 4800, False) * np.sin(440 * np.linspace(0, 0.3, 4800, False) * 2 * np.pi)).astype(np.float32), 16000)
         silence_timer = 0
-        stop_event = threading.Event()
         while True:
             recorder.start_recording()
             with sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS, dtype='float32', blocksize=CHUNK_SIZE) as stream:
@@ -62,7 +62,7 @@ def main():
                 else:
                     continue
 
-            print(f"{Fore.CYAN}[SYSTEM] Przetwarzanie mowy przez CPU.{Style.RESET_ALL}")
+            logger.info("Przetwarzanie mowy przez CPU.")
             text_result = stt.transcribe_audio(audio_data)
 
             if not text_result.strip():
@@ -73,7 +73,7 @@ def main():
                 else:
                     continue
 
-            endings = ["bywaj", "żegnaj", "koniec rozmowy", "dobranoc", "dobra noc", "kończę", "kończymy", "żegnam", "adios"]
+            endings = ["bywaj", "żegnaj", "koniec rozmowy", "dobranoc", "dobra noc", "kończę", "kończymy", "żegnam", "adios", "do zobaczenia"]
             if text_result.strip(" .!?\n").lower() in endings:
                 print(f"[Użytkownik]: {text_result}")
                 byebye = ["Siemano!", "Do zobaczenia!", "Trzymaj się!", "Cześć!", "Na razie!", "Pa!", "Bywaj!", "Żegnam Pana!", "Pozdrawiam",
@@ -116,7 +116,7 @@ def main():
                 clean_sentence = clean_sentence.replace('**', "").replace('*', "")
 
                 if clean_sentence.strip():
-                    tts_queue.put(sentence_buffer)
+                    tts_queue.put(clean_sentence)
 
             tts_queue.put(None)
             print()
@@ -124,20 +124,25 @@ def main():
             t_tts.join()
 
     except KeyboardInterrupt:
+        recorder.stop_recording()
+        time.sleep(0.1)
         sd.stop()
-        tts_queue = None
-        stop_event.set()
-        print("\nPrzerwano działanie programu z klawiatury.")
+        if tts_queue is not None:
+            try:
+                tts_queue.put_nowait(None)
+            except queue.Empty:
+                pass
+        logger.info("Przerwano działanie programu z klawiatury.")
     finally:
         if 'llm' in locals() or 'llm' in globals():
             try:
                 llm.cleanup()
             except Exception as e:
-                print(f"Nie udało się zamknąć silnika LLM: {e}")
-        print("\nPamięć została wyczyszczona.")
+                logger.error(f"Nie udało się zamknąć silnika LLM: {e}", exc_info=True)
+        logger.info("Pamięć została wyczyszczona.")
 
 if __name__ == "__main__":
     start = time.perf_counter()
     main()
     end = time.perf_counter()
-    print(f"Czas wykonania: {end-start:.1f}s")
+    logger.info(f"Czas wykonania: {end-start:.1f}s")
