@@ -1,7 +1,9 @@
 import numpy as np
 from app.config import CHUNK_SIZE, SAMPLE_RATE, VAD_THRESHOLD, VAD_SILENCE_DURATION
 from faster_whisper.vad import get_speech_timestamps
-from colorama import Fore, Style
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 class AudioRecorder:
     def __init__(self):
@@ -33,7 +35,7 @@ class AudioRecorder:
 
         if len(timestamps) > 0:
             if not self.speech_started:
-                print(f"\n{Fore.CYAN}[SYSTEM]: Wykryłem głos, nagrywam...{Style.RESET_ALL}")
+                logger.info("Wykryłem głos, nagrywam...")
             self.speech_started = True
             self.silence_counter = 0.0
         else:
@@ -42,7 +44,7 @@ class AudioRecorder:
             self.silence_counter += chunk_duration
 
             if self.silence_counter >= VAD_SILENCE_DURATION:
-                print(f"{Fore.CYAN}[SYSTEM]: Wykryto koniec wypowiedzi (cisza).{Style.RESET_ALL}")
+                logger.info("Wykryto koniec wypowiedzi (cisza).")
                 self.is_recording = False
 
     def stop_recording(self):
