@@ -4,10 +4,10 @@ def get_current_time() -> str:
     now = datetime.now()
 
     godzina = now.strftime("%H:%M")
-    dzien_tygodnia = now.strftime("%A")
+    dzien_tygodnia = now.weekday()  # 0 = Monday, 6 = Sunday
     dni_pl = {
-            "Monday": "poniedziałek", "Tuesday": "wtorek", "Wednesday": "środa",
-            "Thursday": "czwartek", "Friday": "piątek", "Saturday": "sobota", "Sunday": "niedziela"
+            0: "poniedziałek", 1: "wtorek", 2: "środa",
+            3: "czwartek", 4: "piątek", 5: "sobota", 6: "niedziela"
         }
     dzien_pl = dni_pl.get(dzien_tygodnia, dzien_tygodnia)
 
