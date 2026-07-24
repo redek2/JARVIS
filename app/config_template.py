@@ -13,10 +13,12 @@ STT_MODEL_SIZE = "small"  # tiny / base / small / medium / large-v3 - większy =
 OLLAMA_URL = "http://localhost:11434/v1"
 LLM_MODEL = "TWOJA_NAZWA_MODELU"  # nazwa modelu wystawionego przez Twojego Ollamę (np. wynik `ollama list`)
 LLM_PROVIDER = "ollama"
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+GROQ_MODEL = "openai/gpt-oss-120b"
 
 # LLM PARAMETERS
 LLM_TEMPERATURE = 0.2
-LLM_MAX_TOKENS = 8192
+LLM_MAX_TOKENS = 512
 
 # VAD
 VAD_THRESHOLD = 0.5

@@ -28,6 +28,8 @@ voices/
 venv/
 ENV/
 env/
+.env
+.env.*
 
 ### Audio / Dane
 *.wav
