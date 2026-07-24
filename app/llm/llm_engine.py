@@ -1,13 +1,19 @@
 from openai import OpenAI
-from app.config import LLM_MODEL, OLLAMA_URL, SYSTEM_PROMPT, LLM_PROVIDER, LLM_TEMPERATURE, LLM_MAX_TOKENS, GROQ_API_KEY, GROQ_BASE_URL, GROQ_MODEL
+from app.config import LLM_MODEL, OLLAMA_URL, SYSTEM_PROMPT, LLM_PROVIDER, LLM_TEMPERATURE, LLM_MAX_TOKENS, GROQ_BASE_URL, GROQ_MODEL
 import requests
 from app.tools.tool_manager import ToolManager
 import json
 import re
 import copy
+import os
+from dotenv import load_dotenv
 from app.logger import get_logger
 
+load_dotenv()
 logger = get_logger(__name__)
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+if not GROQ_API_KEY:
+    logger.warning("Brak klucza API GROQ w zmiennych środowiskowych. Upewnij się, że plik .env zawiera poprawny klucz.")
 
 class LLMEngine:
 
@@ -23,7 +29,7 @@ class LLMEngine:
         if (LLM_PROVIDER == "groq"):
             self.client = OpenAI(base_url=GROQ_BASE_URL, api_key=GROQ_API_KEY)
             self.model = GROQ_MODEL
-        else:
+        elif (LLM_PROVIDER == "ollama"):
             self.client = OpenAI(base_url=OLLAMA_URL, api_key="ollama-local")
             self.model = LLM_MODEL
             self._warmup_model()
