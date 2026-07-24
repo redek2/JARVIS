@@ -2,7 +2,7 @@ import threading
 from app.audio_recorder import AudioRecorder
 from app.stt.stt_engine import STTEngine
 import sounddevice as sd
-from app.config import SAMPLE_RATE, CHANNELS, CHUNK_SIZE, OLLAMA_URL, LLM_MODEL
+from app.config import SAMPLE_RATE, CHANNELS, CHUNK_SIZE
 from app.llm.llm_engine import LLMEngine
 from app.tts.tts_engine import TTSEngine
 from app.logger import get_logger
@@ -32,10 +32,17 @@ def tts_worker(tts_engine, tts_queue):
         tts_queue.task_done()
 
 def main():
-    recorder = AudioRecorder()
-    stt = STTEngine()
-    llm = LLMEngine()
-    tts = TTSEngine()
+    try:
+        recorder = AudioRecorder()
+        stt = STTEngine()
+        llm = LLMEngine()
+        tts = TTSEngine()
+    except KeyboardInterrupt:
+        logger.info("Przerwano działanie programu z klawiatury.")
+        return
+    except Exception as e:
+        logger.error(f"Wystąpił błąd podczas inicjalizacji: {e}", exc_info=True)
+        return
     tts_queue = None
 
     try:

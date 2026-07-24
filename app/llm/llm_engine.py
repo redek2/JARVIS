@@ -18,11 +18,6 @@ if not GROQ_API_KEY:
 class LLMEngine:
 
     def __init__(self):
-        self.client = OpenAI(
-            base_url=OLLAMA_URL,
-            api_key="ollama-local",
-        )
-
         self.tool_manager = ToolManager()
         self.history = copy.deepcopy(SYSTEM_PROMPT)
 
