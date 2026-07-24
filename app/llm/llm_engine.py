@@ -1,5 +1,5 @@
 from openai import OpenAI
-from app.config import LLM_MODEL, OLLAMA_URL, SYSTEM_PROMPT, LLM_PROVIDER, LLM_TEMPERATURE, LLM_MAX_TOKENS
+from app.config import LLM_MODEL, OLLAMA_URL, SYSTEM_PROMPT, LLM_PROVIDER, LLM_TEMPERATURE, LLM_MAX_TOKENS, GROQ_API_KEY, GROQ_BASE_URL, GROQ_MODEL
 import requests
 from app.tools.tool_manager import ToolManager
 import json
@@ -20,7 +20,12 @@ class LLMEngine:
         self.tool_manager = ToolManager()
         self.history = copy.deepcopy(SYSTEM_PROMPT)
 
-        if (LLM_PROVIDER == "ollama"):
+        if (LLM_PROVIDER == "groq"):
+            self.client = OpenAI(base_url=GROQ_BASE_URL, api_key=GROQ_API_KEY)
+            self.model = GROQ_MODEL
+        else:
+            self.client = OpenAI(base_url=OLLAMA_URL, api_key="ollama-local")
+            self.model = LLM_MODEL
             self._warmup_model()
 
     def llmInference(self, transcribed_audio):
@@ -28,7 +33,7 @@ class LLMEngine:
 
         try:
             stream = self.client.chat.completions.create(
-                model=LLM_MODEL,
+                model=self.model,
                 messages=self.history,
                 stream=True,
                 tools=self.tool_manager.schemas,
@@ -121,7 +126,7 @@ class LLMEngine:
 
         try:
             second_stream = self.client.chat.completions.create(
-                model=LLM_MODEL,
+                model=self.model,
                 messages=self.history,
                 stream=True
             )
