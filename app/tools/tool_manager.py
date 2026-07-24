@@ -1,5 +1,6 @@
 from app.tools.time_tool import get_current_time, TIME_TOOL_SCHEMA
 from app.tools.date_tool import get_current_date, DATE_TOOL_SCHEMA
+from app.tools.notion_tool import search_notion_info, NOTION_TOOL_SCHEMA
 from app.logger import get_logger
 import logging
 
@@ -10,11 +11,13 @@ class ToolManager:
         self._tools_map = {
             "get_current_time": get_current_time,
             "get_current_date": get_current_date,
+            "search_notion_info": search_notion_info
         }
 
         self.schemas = [
             TIME_TOOL_SCHEMA,
             DATE_TOOL_SCHEMA,
+            NOTION_TOOL_SCHEMA
         ]
 
     def execute_tool(self, name: str, arguments: dict) -> str:

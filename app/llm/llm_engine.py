@@ -1,5 +1,5 @@
 from openai import OpenAI
-from app.config import LLM_MODEL, OLLAMA_URL, SYSTEM_PROMPT, LLM_PROVIDER, LLM_TEMPERATURE, LLM_MAX_TOKENS, GROQ_BASE_URL, GROQ_MODEL
+from app.config import LLM_MODEL, OLLAMA_URL, SYSTEM_PROMPT, LLM_PROVIDER, LLM_TEMPERATURE, LLM_MAX_TOKENS, GROQ_BASE_URL, GROQ_MODEL, LLM_FREQUENCY_PENALTY, MAX_HISTORY_TOKENS
 import requests
 from app.tools.tool_manager import ToolManager
 import json
@@ -31,6 +31,7 @@ class LLMEngine:
 
     def llmInference(self, transcribed_audio):
         self.history.append({"role": "user", "content": transcribed_audio})
+        self._trim_history()
 
         try:
             stream = self.client.chat.completions.create(
@@ -39,7 +40,8 @@ class LLMEngine:
                 stream=True,
                 tools=self.tool_manager.schemas,
                 temperature=LLM_TEMPERATURE,
-                max_tokens=LLM_MAX_TOKENS
+                max_tokens=LLM_MAX_TOKENS,
+                frequency_penalty=LLM_FREQUENCY_PENALTY
             )
 
             full_response = ""
@@ -125,11 +127,15 @@ class LLMEngine:
             "content": str(tool_result)
         })
 
+        self._trim_history()
+
         try:
             second_stream = self.client.chat.completions.create(
                 model=self.model,
                 messages=self.history,
-                stream=True
+                stream=True,
+                max_tokens=LLM_MAX_TOKENS,
+                frequency_penalty=LLM_FREQUENCY_PENALTY
             )
 
             second_full_response = ""
@@ -164,3 +170,48 @@ class LLMEngine:
             response = requests.post(OLLAMA_URL.replace("/v1", "/api/generate"), json={"model": LLM_MODEL, "keep_alive": 0})
         except Exception as e:
             logger.warning(f"Nie udało się zwolnić modelu: {e}", exc_info=True)
+
+    def _trim_history(self):
+        if len(self.history) <= 2:
+            return
+
+        system_msg = self.history[0]
+        last_msg = self.history[-1]
+        middle = self.history[1:-1]
+
+        def approx_tokens(msg):
+            content = msg.get("content") or ""
+            if not isinstance(content, str):
+                content = str(content)
+            tool_calls = msg.get("tool_calls")
+            if tool_calls:
+                content += str(tool_calls)
+            return len(content) // 4
+
+        used = approx_tokens(system_msg) + approx_tokens(last_msg)
+        budget = MAX_HISTORY_TOKENS - used
+
+        kept_reversed = []
+        i = len(middle) - 1
+        while i >= 0:
+            msg = middle[i]
+
+            if msg.get("role") == "tool" and i - 1 >= 0 and middle[i - 1].get("role") == "assistant":
+                pair_cost = approx_tokens(middle[i - 1]) + approx_tokens(msg)
+                if budget - pair_cost < 0:
+                    break
+                budget -= pair_cost
+                kept_reversed.append(msg)
+                kept_reversed.append(middle[i - 1])
+                i -= 2
+                continue
+
+            cost = approx_tokens(msg)
+            if budget - cost < 0:
+                break
+            budget -= cost
+            kept_reversed.append(msg)
+            i -= 1
+
+        kept = list(reversed(kept_reversed))
+        self.history = [system_msg] + kept + [last_msg]

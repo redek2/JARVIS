@@ -30,7 +30,7 @@ class TTSEngine:
         
         audio = self.tts.generate(text=textToRead,
                              sid=0,
-                             speed=1.0)
+                             speed=0.8)
         
         sd.play(audio.samples, samplerate=audio.sample_rate)
         sd.wait()
