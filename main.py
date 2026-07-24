@@ -86,6 +86,8 @@ def main():
 
             print("[JARVIS]: ", end="", flush=True)
 
+            tts.reset_stop()
+
             tts_queue = queue.Queue()
             t_tts = threading.Thread(target=tts_worker, args=(tts, tts_queue), daemon=True)
             t_tts.start()
@@ -125,13 +127,16 @@ def main():
 
     except KeyboardInterrupt:
         recorder.stop_recording()
-        time.sleep(0.1)
-        sd.stop()
+        tts.stop()
         if tts_queue is not None:
-            try:
-                tts_queue.put_nowait(None)
-            except queue.Empty:
-                pass
+            while not tts_queue.empty():
+                try:
+                    tts_queue.get_nowait()
+                    tts_queue.task_done()
+                except queue.Empty:
+                    break
+            tts_queue.put(None)
+
         logger.info("Przerwano działanie programu z klawiatury.")
     finally:
         if 'llm' in locals() or 'llm' in globals():

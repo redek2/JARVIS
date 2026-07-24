@@ -1,5 +1,6 @@
 import sherpa_onnx
 import sounddevice as sd
+import threading
 
 class TTSEngine:
     def __init__(self):
@@ -18,8 +19,12 @@ class TTSEngine:
             raise ValueError("Please check your config")
         
         self.tts = sherpa_onnx.OfflineTts(config)
+        self.stop_event = threading.Event()
 
     def ttsInference(self, textToRead):
+        if self.stop_event.is_set():
+            return
+
         if not textToRead or not textToRead.strip() or len(textToRead.strip()) <= 1:
             return
         
@@ -29,3 +34,10 @@ class TTSEngine:
         
         sd.play(audio.samples, samplerate=audio.sample_rate)
         sd.wait()
+
+    def stop(self):
+        self.stop_event.set()
+        sd.stop()
+
+    def reset_stop(self):
+        self.stop_event.clear()
