@@ -100,7 +100,7 @@ def main():
             t_tts.start()
             
             sentence_buffer = ""
-            generator = llm.llmInference(text_result)
+            generator = llm.llmInference(text_result + "\nOdpowiedz krótko")
 
             for token in generator:
                 print(token, end="", flush=True)
