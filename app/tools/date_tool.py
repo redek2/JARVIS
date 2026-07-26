@@ -1,3 +1,8 @@
+"""
+Narzędzie (tool) LLM zwracające aktualną datę wypowiedzianą słownie po polsku
+(np. "dwudziesty szósty lipca dwa tysiące dwudziestego szóstego"), zgodnie
+z zasadą z promptu systemowego, aby TTS mógł poprawnie odczytać datę na głos.
+"""
 from datetime import datetime
 from app.logger import get_logger
 import logging
@@ -5,6 +10,9 @@ import logging
 logger = get_logger(__name__, level=logging.DEBUG)
 
 def get_current_date():
+    """Zwraca aktualną datę systemową w formie pełnego, słownego zdania
+    po polsku (dzień, miesiąc i rok zapisane słowami). Funkcja jest
+    wywoływana przez LLM jako narzędzie zdefiniowane w DATE_TOOL_SCHEMA."""
     now = datetime.now()
     day_num = now.day
     month_num = now.month
@@ -18,6 +26,8 @@ def get_current_date():
     logger.debug(f"Aktualna data to {date} roku")
     return f"Aktualna data to {date} roku"
 
+# Definicja narzędzia w formacie function-calling (OpenAI-compatible),
+# udostępniana modelowi językowemu przez ToolManager.
 DATE_TOOL_SCHEMA = {
     "type": "function",
     "function": {
@@ -32,6 +42,9 @@ DATE_TOOL_SCHEMA = {
 }
 
 def dzien_slownie(dzien: int) -> str:
+    """Zamienia numer dnia miesiąca (1-31) na jego słowną, odmienioną formę
+    po polsku (np. 1 -> "pierwszy"). Jeśli numer nie znajduje się w słowniku,
+    zwraca go jako zwykły ciąg znaków (liczbę)."""
     DAYS_PL = {
         1: "pierwszy",
         2: "drugi",
@@ -69,6 +82,8 @@ def dzien_slownie(dzien: int) -> str:
     return DAYS_PL.get(dzien, str(dzien))
 
 def miesiac_slownie(month: int) -> str:
+    """Zamienia numer miesiąca (1-12) na jego słowną nazwę w dopełniaczu
+    po polsku (np. 7 -> "lipca")."""
     MONTHS_PL = {
         1: "stycznia",
         2: "lutego",
@@ -88,6 +103,9 @@ def miesiac_slownie(month: int) -> str:
     return f"{month_slownie}"
 
 def rok_slownie(year: int) -> str:
+    """Zamienia rok (dla lat 2020-2040) na jego pełną, słowną formę po polsku
+    (np. 2026 -> "dwa tysiące dwudziestego szóstego"). Dla lat spoza zakresu
+    zwraca samą liczbę jako ciąg znaków."""
     YEARS_PL = {
         2020: "dwa tysiące dwudziestego",
         2021: "dwa tysiące dwudziestego pierwszego",

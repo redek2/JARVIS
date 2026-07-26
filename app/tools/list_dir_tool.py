@@ -1,9 +1,14 @@
+"""
+Narzędzie (tool) LLM zwracające zawartość wskazanego katalogu - użyteczne,
+gdy użytkownik nie jest pewien dokładnej nazwy folderu lub pyta o jego zawartość.
+"""
 import os
 
 def list_directory(path: str = "~") -> str:
     """
     Zwraca listę plików i folderów znajdująctch się w podanej ścieżce.
     """
+    # Rozwinięcie tyldy (~) do pełnej ścieżki katalogu domowego użytkownika
     expanded_path = os.path.expanduser(path)
 
     if not os.path.expanduser(path):
@@ -12,6 +17,8 @@ def list_directory(path: str = "~") -> str:
         return f"Błąd: Ścieżka {path} nie jest folderem."
 
     try:
+        # Rozdzielenie zawartości katalogu na foldery i pliki, każde posortowane
+        # alfabetycznie, aby wynik był czytelny dla użytkownika/modelu.
         entries = os.listdir(expanded_path)
         folders = [f"[DIR] {e}" for e in entries if os.path.isdir(os.path.join(expanded_path, e))]
         files = [f"[FILE] {e}" for e in entries if os.path.isfile(os.path.join(expanded_path, e))]
@@ -25,6 +32,8 @@ def list_directory(path: str = "~") -> str:
     except Exception as e:
         return f"Błąd podczas odczytu folderu: {str(e)}"
 
+# Definicja narzędzia w formacie function-calling (OpenAI-compatible),
+# udostępniana modelowi językowemu przez ToolManager.
 LIST_DIRECTORY_SCHEMA = {
     "type": "function",
     "function": {

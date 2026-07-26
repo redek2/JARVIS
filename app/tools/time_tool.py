@@ -1,3 +1,7 @@
+"""
+Narzędzie (tool) LLM zwracające aktualną godzinę i dzień tygodnia,
+wypowiedziane słownie po polsku, aby TTS mógł je poprawnie odczytać na głos.
+"""
 from datetime import datetime
 from app.logger import get_logger
 import logging
@@ -5,6 +9,10 @@ import logging
 logger = get_logger(__name__, level=logging.DEBUG)
 
 def get_current_time() -> str:
+    """Zwraca aktualną godzinę i dzień tygodnia w formie pełnego, słownego
+    zdania po polsku (np. "Obecnie jest trzynasta piętnaście, a dzisiaj jest
+    czwartek."). Funkcja jest wywoływana przez LLM jako narzędzie
+    zdefiniowane w TIME_TOOL_SCHEMA."""
     now = datetime.now()
 
     godzina_num = now.hour
@@ -38,6 +46,10 @@ TIME_TOOL_SCHEMA = {
 }
 
 def godzina_slownie(godzina: int) -> str:
+    """Zamienia godzinę w formacie 24-godzinnym (0-23) na jej słowną,
+    żeńską formę gramatyczną po polsku (np. 13 -> "trzynasta").
+    Uwaga: brakuje wpisu dla godziny 0 - w takim przypadku zwracana
+    jest liczba jako ciąg znaków (fallback słownika)."""
 
     HOURS_PL = {
         1: "pierwsza",
@@ -68,6 +80,8 @@ def godzina_slownie(godzina: int) -> str:
     return HOURS_PL.get(godzina, str(godzina))
 
 def minuta_slownie(minuta: int) -> str:
+    """Zamienia minutę (0-59) na jej słowną formę po polsku
+    (np. 15 -> "piętnaście")."""
     NUMBERS_PL = {
         0: "zero",
         1: "jeden",

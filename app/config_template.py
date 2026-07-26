@@ -1,29 +1,35 @@
 # Skopiuj ten plik jako config.py i uzupełnij wartości oznaczone placeholderami.
 # config.py jest w .gitignore, więc Twoje osobiste ustawienia nie trafią do repo.
+#
+# Ten plik jest szablonem (wzorcem) konfiguracji - nie jest bezpośrednio
+# używany przez aplikację. Aplikacja importuje ustawienia z `config.py`,
+# który każdy użytkownik tworzy lokalnie na podstawie tego pliku.
 
-# AUDIO
+# --- AUDIO: parametry nagrywania dźwięku z mikrofonu ---
 SAMPLE_RATE = 16000
 CHANNELS = 1
 CHUNK_SIZE = 1024
 
-# WHISPER MODEL
+# --- WHISPER MODEL: rozmiar modelu STT (faster-whisper) ---
 STT_MODEL_SIZE = "small"  # tiny / base / small / medium / large-v3 - większy = wolniejszy, ale dokładniejszy
 
-# LLM (OLLAMA)
+# --- LLM (OLLAMA): konfiguracja dostawcy modelu językowego ---
 OLLAMA_URL = "http://localhost:11434/v1"
 LLM_MODEL = "TWOJA_NAZWA_MODELU"  # nazwa modelu wystawionego przez Twojego Ollamę (np. wynik `ollama list`)
 LLM_PROVIDER = "ollama"
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 GROQ_MODEL = "openai/gpt-oss-120b"
 
-# LLM PARAMETERS
+# --- LLM PARAMETERS: parametry generowania odpowiedzi przez model językowy ---
 LLM_TEMPERATURE = 0.2
 LLM_MAX_TOKENS = 512
 
-# VAD
+# --- VAD: parametry wykrywania aktywności głosowej (Voice Activity Detection) ---
 VAD_THRESHOLD = 0.5
 VAD_SILENCE_DURATION = 1
 
+# Szablon promptu systemowego - zastąp [NAZWA_ASYSTENTA] i [IMIE_UZYTKOWNIKA]
+# własnymi wartościami przy tworzeniu config.py.
 SYSTEM_PROMPT = [
             {
                 "role": "system",

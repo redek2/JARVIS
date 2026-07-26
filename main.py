@@ -1,3 +1,18 @@
+"""
+Punkt wejścia asystenta głosowego JARVIS.
+
+Główna pętla programu realizuje cykl:
+    1. Nagrywanie mowy użytkownika z wykrywaniem aktywności głosowej (VAD).
+    2. Transkrypcja nagrania na tekst (STT).
+    3. Wysłanie tekstu do modelu językowego (LLM), który odpowiada strumieniowo
+       i w razie potrzeby korzysta z narzędzi (np. podanie godziny, przeszukanie Notion).
+    4. Odczytanie odpowiedzi na głos (TTS) zdanie po zdaniu, równolegle do generowania
+       kolejnych tokenów przez LLM.
+
+Nagrywanie audio, generowanie odpowiedzi LLM i synteza mowy działają
+w osobnych wątkach, aby TTS mogło zacząć czytać pierwsze zdanie zanim
+LLM skończy generować całą odpowiedź.
+"""
 import threading
 from app.audio_recorder import AudioRecorder
 from app.stt.stt_engine import STTEngine
@@ -15,6 +30,10 @@ import random
 logger = get_logger(__name__)
 
 def recording_worker(recorder, stream):
+    """Wątek pomocniczy: w pętli pobiera kolejne paczki audio ze strumienia
+    mikrofonu i przekazuje je do rejestratora (AudioRecorder), dopóki trwa
+    nagrywanie i strumień jest aktywny. Wyjątki (np. zamknięcie strumienia)
+    przerywają pętlę bez propagowania błędu do wątku głównego."""
     while recorder.is_recording and stream.active:
         try:
             recorder.record_chunk(stream)
@@ -22,6 +41,12 @@ def recording_worker(recorder, stream):
             break
 
 def tts_worker(tts_engine, tts_queue):
+    """Wątek pomocniczy odpowiedzialny za odtwarzanie mowy (TTS).
+
+    Pobiera z kolejki kolejne gotowe zdania i odczytuje je na głos.
+    Wstawienie wartości None do kolejki jest sygnałem zakończenia pracy
+    wątku (odpowiednik komunikatu 'koniec strumienia').
+    """
     while True:
         sentence = tts_queue.get()
         if sentence is None:
@@ -32,6 +57,10 @@ def tts_worker(tts_engine, tts_queue):
         tts_queue.task_done()
 
 def main():
+    """Główna funkcja programu: inicjalizuje silniki (STT, LLM, TTS, rejestrator
+    audio), a następnie uruchamia nieskończoną pętlę konwersacji głos-tekst-głos,
+    aż do wykrycia frazy pożegnalnej, dłuższej ciszy (tryb uśpienia) lub
+    przerwania z klawiatury (Ctrl+C)."""
     try:
         recorder = AudioRecorder()
         stt = STTEngine()
@@ -47,11 +76,15 @@ def main():
 
     try:
         logger.info("System gotowy.")
+        # Krótki dźwiękowy sygnał (opadający ton 440 Hz) informujący użytkownika, że system wystartował.
         sd.play((np.linspace(0.3, 0.0, 4800, False) * np.sin(440 * np.linspace(0, 0.3, 4800, False) * 2 * np.pi)).astype(np.float32), 16000)
-        silence_timer = 0
+        silence_timer = 0  # licznik kolejnych "pustych" tur (bez wykrytej mowy) - po 30 program usypia
         while True:
+            # --- 1. Nagrywanie ---
             recorder.start_recording()
             with sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS, dtype='float32', blocksize=CHUNK_SIZE) as stream:
+                # Nagrywanie odbywa się w osobnym wątku, aby pętla główna mogła
+                # jednocześnie czekać na zakończenie wypowiedzi (recorder.is_recording == False)
                 t = threading.Thread(target=recording_worker, args=(recorder, stream), daemon=True)
                 t.start()
 
@@ -61,6 +94,7 @@ def main():
                 audio_data = recorder.stop_recording()
                 t.join()
             
+            # Brak wykrytej mowy (VAD) lub puste nagranie - zwiększ licznik ciszy i ewentualnie uśpij system
             if not recorder.speech_started or len(audio_data) == 0:
                 silence_timer += 1
                 if silence_timer >= 30:
@@ -69,9 +103,11 @@ def main():
                 else:
                     continue
 
+            # --- 2. Transkrypcja mowy na tekst (STT) ---
             logger.info("Przetwarzanie mowy przez CPU.")
             text_result = stt.transcribe_audio(audio_data)
 
+            # Whisper nie rozpoznał żadnego tekstu - traktuj jak ciszę
             if not text_result.strip():
                 silence_timer += 1
                 if silence_timer >= 30:
@@ -80,6 +116,7 @@ def main():
                 else:
                     continue
 
+            # Rozpoznanie frazy kończącej rozmowę - jeśli użytkownik pożegnał się, zakończ pętlę
             endings = ["bywaj", "żegnaj", "koniec rozmowy", "dobranoc", "dobra noc", "kończę", "kończymy", "żegnam", "adios", "do zobaczenia"]
             if text_result.strip(" .!?\n").lower() in endings:
                 print(f"[Użytkownik]: {text_result}")
@@ -95,6 +132,9 @@ def main():
 
             tts.reset_stop()
 
+            # --- 3. Generowanie odpowiedzi (LLM) i równoległe odtwarzanie (TTS) ---
+            # Kolejka pośredniczy między wątkiem generującym tekst a wątkiem czytającym go na głos,
+            # dzięki czemu TTS może zacząć mówić pierwsze zdanie zanim LLM skończy całą odpowiedź.
             tts_queue = queue.Queue()
             t_tts = threading.Thread(target=tts_worker, args=(tts, tts_queue), daemon=True)
             t_tts.start()
@@ -102,14 +142,20 @@ def main():
             sentence_buffer = ""
             generator = llm.llmInference(text_result + "\nOdpowiedz krótko")
 
+            # LLM zwraca tekst strumieniowo (token po tokenie). Bufor składamy w zdania -
+            # każde zakończone znakiem interpunkcyjnym (. ! ? lub nową linią) zdanie jest
+            # oczyszczane z artefaktów formatowania (Markdown, znaczniki narzędzi) i wysyłane
+            # do kolejki TTS, aby móc je odczytać zanim reszta odpowiedzi zostanie wygenerowana.
             for token in generator:
                 print(token, end="", flush=True)
                 sentence_buffer += token
 
                 if re.search(r'[.!?\n]\s*$', sentence_buffer):
+                    # Usuń ewentualne fragmenty JSON/wywołań narzędzi oraz znaczniki w nawiasach kłątkowych/ostrych
                     clean_sentence = re.sub(r'\{.*?\}', '', sentence_buffer, flags=re.DOTALL)
                     clean_sentence = re.sub(r'<.*?>|\[.*?\]', '', clean_sentence)
 
+                    # Usuń znaczniki Markdown, których syntezator mowy nie powinien czytać na głos
                     clean_sentence = clean_sentence.replace('**', "")
                     clean_sentence = clean_sentence.replace('*', "")
                     clean_sentence = clean_sentence.replace('```', "")
@@ -119,6 +165,7 @@ def main():
 
                     sentence_buffer = ""
 
+            # Ostatni, niedomknięty fragment odpowiedzi (bez końcowej interpunkcji) również trzeba przeczytać
             if sentence_buffer.strip():
                 clean_sentence = re.sub(r'\{.*?\}', '', sentence_buffer, flags=re.DOTALL)
                 clean_sentence = re.sub(r'<.*?>|\[.*?\]', '', clean_sentence)
@@ -133,6 +180,8 @@ def main():
             t_tts.join()
 
     except KeyboardInterrupt:
+        # Użytkownik przerwał program (Ctrl+C) - zatrzymaj nagrywanie i odtwarzanie,
+        # a następnie wyczyść kolejkę TTS i poślij sygnał zakończenia do wątku TTS.
         recorder.stop_recording()
         tts.stop()
         if tts_queue is not None:
@@ -146,6 +195,8 @@ def main():
 
         logger.info("Przerwano działanie programu z klawiatury.")
     finally:
+        # Niezależnie od sposobu zakończenia pętli - zwolnij zasoby silnika LLM
+        # (np. wyładuj model z pamięci Ollamy, jeśli był używany lokalny provider).
         if 'llm' in locals() or 'llm' in globals():
             try:
                 llm.cleanup()
@@ -154,6 +205,7 @@ def main():
         logger.info("Pamięć została wyczyszczona.")
 
 if __name__ == "__main__":
+    # Uruchomienie programu i pomiar całkowitego czasu działania (do logów diagnostycznych)
     start = time.perf_counter()
     main()
     end = time.perf_counter()
