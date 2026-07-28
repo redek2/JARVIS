@@ -11,7 +11,7 @@ def list_directory(path: str = "~") -> str:
     # Rozwinięcie tyldy (~) do pełnej ścieżki katalogu domowego użytkownika
     expanded_path = os.path.expanduser(path)
 
-    if not os.path.expanduser(path):
+    if not os.path.exists(expanded_path):
         return f"Błąd: Ścieżka {path} nie istnieje."
     if not os.path.isdir(expanded_path):
         return f"Błąd: Ścieżka {path} nie jest folderem."
