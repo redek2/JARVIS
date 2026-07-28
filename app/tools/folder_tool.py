@@ -43,7 +43,7 @@ FOLDER_TOOL_SCHEMA = {
                     "description": "Ścieżka do pliku lub folderu, np. '~/Pobrane', '~/Dokumenty', '/home/user/Obrazy'. Możesz używać tyldy (~) do oznaczania katalogu domowego."
                 }
             },
-            "required": []
+            "required": ["path"]
         }
     }
 }
