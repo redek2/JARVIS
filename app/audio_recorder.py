@@ -7,7 +7,7 @@ trwająca dłużej niż VAD_SILENCE_DURATION sekund - dzięki temu użytkownik
 nie musi ręcznie sygnalizować końca wypowiedzi.
 """
 import numpy as np
-from app.config import CHUNK_SIZE, SAMPLE_RATE, VAD_THRESHOLD, VAD_SILENCE_DURATION
+from app.config import CHUNK_SIZE, SAMPLE_RATE, VAD_THRESHOLD, VAD_SILENCE_DURATION, SILENCE_TIMER
 from faster_whisper.vad import get_speech_timestamps
 from app.logger import get_logger
 
@@ -70,8 +70,9 @@ class AudioRecorder:
             chunk_duration = CHUNK_SIZE / SAMPLE_RATE
             self.silence_counter += chunk_duration
 
-            if self.silence_counter >= VAD_SILENCE_DURATION:
-                logger.info("Wykryto koniec wypowiedzi (cisza).")
+            if (self.silence_counter >= VAD_SILENCE_DURATION):
+                if (self.speech_started == True):
+                    logger.info("Wykryto koniec wypowiedzi (cisza).")
                 self.is_recording = False
 
     def stop_recording(self):

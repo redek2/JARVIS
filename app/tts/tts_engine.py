@@ -44,7 +44,7 @@ class TTSEngine:
         # sid=0 - identyfikator głosu (pojedynczy głos w tym modelu); speed=0.8 - lekko spowolnione tempo mówienia
         audio = self.tts.generate(text=textToRead,
                              sid=0,
-                             speed=0.8)
+                             speed=1)
         
         sd.play(audio.samples, samplerate=audio.sample_rate)
         sd.wait()  # blokuje wątek do zakończenia odtwarzania dźwięku

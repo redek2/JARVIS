@@ -17,44 +17,18 @@ import threading
 from app.audio_recorder import AudioRecorder
 from app.stt.stt_engine import STTEngine
 import sounddevice as sd
-from app.config import SAMPLE_RATE, CHANNELS, CHUNK_SIZE
+from app.config import SAMPLE_RATE, CHANNELS, CHUNK_SIZE, SILENCE_TIMER
 from app.llm.llm_engine import LLMEngine
 from app.tts.tts_engine import TTSEngine
 from app.logger import get_logger
+from app.asphalt import recording_worker, tts_worker, InactivityTracker
 import time
 import numpy as np
 import queue
 import re
 import random
 
-logger = get_logger(__name__)
-
-def recording_worker(recorder, stream):
-    """Wątek pomocniczy: w pętli pobiera kolejne paczki audio ze strumienia
-    mikrofonu i przekazuje je do rejestratora (AudioRecorder), dopóki trwa
-    nagrywanie i strumień jest aktywny. Wyjątki (np. zamknięcie strumienia)
-    przerywają pętlę bez propagowania błędu do wątku głównego."""
-    while recorder.is_recording and stream.active:
-        try:
-            recorder.record_chunk(stream)
-        except Exception:
-            break
-
-def tts_worker(tts_engine, tts_queue):
-    """Wątek pomocniczy odpowiedzialny za odtwarzanie mowy (TTS).
-
-    Pobiera z kolejki kolejne gotowe zdania i odczytuje je na głos.
-    Wstawienie wartości None do kolejki jest sygnałem zakończenia pracy
-    wątku (odpowiednik komunikatu 'koniec strumienia').
-    """
-    while True:
-        sentence = tts_queue.get()
-        if sentence is None:
-            tts_queue.task_done()
-            break
-
-        tts_engine.ttsInference(sentence)
-        tts_queue.task_done()
+logger = get_logger(__name__)     
 
 def main():
     """Główna funkcja programu: inicjalizuje silniki (STT, LLM, TTS, rejestrator
@@ -66,6 +40,7 @@ def main():
         stt = STTEngine()
         llm = LLMEngine()
         tts = TTSEngine()
+        tracker = InactivityTracker()
     except KeyboardInterrupt:
         logger.info("Przerwano działanie programu z klawiatury.")
         return
@@ -78,7 +53,7 @@ def main():
         logger.info("System gotowy.")
         # Krótki dźwiękowy sygnał (opadający ton 440 Hz) informujący użytkownika, że system wystartował.
         sd.play((np.linspace(0.3, 0.0, 4800, False) * np.sin(440 * np.linspace(0, 0.3, 4800, False) * 2 * np.pi)).astype(np.float32), 16000)
-        silence_timer = 0  # licznik kolejnych "pustych" tur (bez wykrytej mowy) - po 30 program usypia
+        unload_timer = time.perf_counter()
         while True:
             # --- 1. Nagrywanie ---
             recorder.start_recording()
@@ -96,8 +71,10 @@ def main():
             
             # Brak wykrytej mowy (VAD) lub puste nagranie - zwiększ licznik ciszy i ewentualnie uśpij system
             if not recorder.speech_started or len(audio_data) == 0:
-                silence_timer += 1
-                if silence_timer >= 30:
+                elapsed = time.perf_counter() - unload_timer
+                remaining = SILENCE_TIMER - elapsed
+                tracker.inactivity_worker(remaining)
+                if elapsed >= SILENCE_TIMER:
                     tts.ttsInference("Wykryłem brak aktywności. Przechodzę w tryb uśpienia.")
                     break
                 else:
@@ -109,8 +86,10 @@ def main():
 
             # Whisper nie rozpoznał żadnego tekstu - traktuj jak ciszę
             if not text_result.strip():
-                silence_timer += 1
-                if silence_timer >= 30:
+                elapsed = time.perf_counter() - unload_timer
+                remaining = SILENCE_TIMER - elapsed
+                tracker.inactivity_worker(remaining)
+                if elapsed >= SILENCE_TIMER:
                     tts.ttsInference("Wykryłem brak aktywności. Przechodzę w tryb uśpienia. Do widzenia.")
                     break
                 else:
@@ -126,7 +105,6 @@ def main():
                 break
 
             print(f"\n[Użytkownik]: {text_result}")
-            silence_timer = 0
 
             print("[JARVIS]: ", end="", flush=True)
 
@@ -159,6 +137,7 @@ def main():
                     clean_sentence = clean_sentence.replace('**', "")
                     clean_sentence = clean_sentence.replace('*', "")
                     clean_sentence = clean_sentence.replace('```', "")
+                    clean_sentence = clean_sentence.replace('`', "")
 
                     if clean_sentence.strip():
                         tts_queue.put(clean_sentence)
@@ -178,6 +157,8 @@ def main():
             print()
 
             t_tts.join()
+            unload_timer = time.perf_counter()
+            tracker = InactivityTracker()
 
     except KeyboardInterrupt:
         # Użytkownik przerwał program (Ctrl+C) - zatrzymaj nagrywanie i odtwarzanie,
