@@ -23,9 +23,6 @@ from app.logger import get_logger
 load_dotenv()
 logger = get_logger(__name__)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if not GROQ_API_KEY:
-    logger.warning("Brak klucza API GROQ w zmiennych środowiskowych. Upewnij się, że plik .env zawiera poprawny klucz.")
-
 class LLMEngine:
     """Otacza klienta OpenAI-compatible (Groq lub Ollama) i zarządza pełnym
     cyklem życia jednej rozmowy: historią wiadomości, strumieniowaniem
