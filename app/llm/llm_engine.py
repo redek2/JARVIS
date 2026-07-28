@@ -41,6 +41,8 @@ class LLMEngine:
         if (LLM_PROVIDER == "groq"):
             self.client = OpenAI(base_url=GROQ_BASE_URL, api_key=GROQ_API_KEY)
             self.model = GROQ_MODEL
+            if not GROQ_API_KEY:
+                raise RuntimeError("Brak klucza API GROQ w zmiennych środowiskowych. Upewnij się, że plik .env zawiera poprawny klucz.")
         elif (LLM_PROVIDER == "ollama"):
             self.client = OpenAI(base_url=OLLAMA_URL, api_key="ollama-local")
             self.model = LLM_MODEL
