@@ -217,7 +217,7 @@ class LLMEngine:
         """Wysyła żądanie do Ollamy o natychmiastowe zwolnienie modelu z pamięci
         (keep_alive=0), aby nie zajmował zasobów po zakończeniu programu."""
         try:
-            response = requests.post(OLLAMA_URL.replace("/v1", "/api/generate"), json={"model": LLM_MODEL, "keep_alive": 0})
+            response = requests.post(OLLAMA_URL.replace("/v1", "/api/generate"), json={"model": LLM_MODEL, "keep_alive": 0}, timeout=10)
         except Exception as e:
             logger.warning(f"Nie udało się zwolnić modelu: {e}", exc_info=True)
 

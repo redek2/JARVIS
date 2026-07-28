@@ -59,7 +59,7 @@ def _search_notion(query: str):
     payload = {"query": query}
 
     try:
-        response = requests.post(url, headers=headers, json=payload)
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
         logger.error(f"Error searching Notion: {e}")
@@ -78,7 +78,7 @@ def _query_database(database_id: str):
         "Notion-Version": "2022-06-28"
     }
     try:
-        response = requests.post(url, headers=headers)
+        response = requests.post(url, headers=headers, timeout=10)
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
         logger.error(f"Error querying Notion database: {e}")
