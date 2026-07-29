@@ -11,7 +11,8 @@ def recording_worker(recorder, stream):
     while recorder.is_recording and stream.active:
         try:
             recorder.record_chunk(stream)
-        except Exception:
+        except Exception as e:
+            logger.error(f"Worker wyrzucił błąd: {e}", exc_info=True)
             break
 
 def tts_worker(tts_engine, tts_queue):
