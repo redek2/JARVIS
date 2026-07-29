@@ -55,110 +55,120 @@ def main():
         sd.play((np.linspace(0.3, 0.0, 4800, False) * np.sin(440 * np.linspace(0, 0.3, 4800, False) * 2 * np.pi)).astype(np.float32), 16000)
         unload_timer = time.perf_counter()
         while True:
-            # --- 1. Nagrywanie ---
-            recorder.start_recording()
-            with sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS, dtype='float32', blocksize=CHUNK_SIZE) as stream:
-                # Nagrywanie odbywa się w osobnym wątku, aby pętla główna mogła
-                # jednocześnie czekać na zakończenie wypowiedzi (recorder.is_recording == False)
-                t = threading.Thread(target=recording_worker, args=(recorder, stream), daemon=True)
-                t.start()
+            try:
+                tts_queue = None
+                # --- 1. Nagrywanie ---
+                recorder.start_recording()
+                with sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS, dtype='float32', blocksize=CHUNK_SIZE) as stream:
+                    # Nagrywanie odbywa się w osobnym wątku, aby pętla główna mogła
+                    # jednocześnie czekać na zakończenie wypowiedzi (recorder.is_recording == False)
+                    t = threading.Thread(target=recording_worker, args=(recorder, stream), daemon=True)
+                    t.start()
 
-                while recorder.is_recording:
-                    time.sleep(0.1)
+                    while recorder.is_recording:
+                        time.sleep(0.1)
 
-                audio_data = recorder.stop_recording()
-                t.join()
-            
-            # Brak wykrytej mowy (VAD) lub puste nagranie - zwiększ licznik ciszy i ewentualnie uśpij system
-            if not recorder.speech_started or len(audio_data) == 0:
-                elapsed = time.perf_counter() - unload_timer
-                remaining = SILENCE_TIMER - elapsed
-                tracker.inactivity_worker(remaining)
-                if elapsed >= SILENCE_TIMER:
-                    tts.ttsInference("Wykryłem brak aktywności. Przechodzę w tryb uśpienia.")
+                    audio_data = recorder.stop_recording()
+                    t.join()
+                
+                # Brak wykrytej mowy (VAD) lub puste nagranie - zwiększ licznik ciszy i ewentualnie uśpij system
+                if not recorder.speech_started or len(audio_data) == 0:
+                    elapsed = time.perf_counter() - unload_timer
+                    remaining = SILENCE_TIMER - elapsed
+                    tracker.inactivity_worker(remaining)
+                    if elapsed >= SILENCE_TIMER:
+                        tts.ttsInference("Wykryłem brak aktywności. Przechodzę w tryb uśpienia.")
+                        break
+                    else:
+                        continue
+
+                # --- 2. Transkrypcja mowy na tekst (STT) ---
+                logger.info("Przetwarzanie mowy przez CPU.")
+                text_result = stt.transcribe_audio(audio_data)
+
+                # Whisper nie rozpoznał żadnego tekstu - traktuj jak ciszę
+                if not text_result.strip():
+                    elapsed = time.perf_counter() - unload_timer
+                    remaining = SILENCE_TIMER - elapsed
+                    tracker.inactivity_worker(remaining)
+                    if elapsed >= SILENCE_TIMER:
+                        tts.ttsInference("Wykryłem brak aktywności. Przechodzę w tryb uśpienia. Do widzenia.")
+                        break
+                    else:
+                        continue
+
+                # Rozpoznanie frazy kończącej rozmowę - jeśli użytkownik pożegnał się, zakończ pętlę
+                endings = ["bywaj", "żegnaj", "koniec rozmowy", "dobranoc", "dobra noc", "kończę", "kończymy", "żegnam", "adios", "do zobaczenia"]
+                if text_result.strip(" .!?\n").lower() in endings:
+                    print(f"[Użytkownik]: {text_result}")
+                    byebye = ["Siemano!", "Do zobaczenia!", "Trzymaj się!", "Cześć!", "Na razie!", "Pa!", "Bywaj!", "Żegnam Pana!", "Pozdrawiam",
+                            "Do ponownego zobaczenia!", "Kłaniam się nisko!", "Do następnego!", "Pomyślności!", "Wszystkiego dobrego!", "Z fartem!"]
+                    tts.ttsInference(random.choice(byebye))
                     break
-                else:
-                    continue
 
-            # --- 2. Transkrypcja mowy na tekst (STT) ---
-            logger.info("Przetwarzanie mowy przez CPU.")
-            text_result = stt.transcribe_audio(audio_data)
+                print(f"\n[Użytkownik]: {text_result}")
 
-            # Whisper nie rozpoznał żadnego tekstu - traktuj jak ciszę
-            if not text_result.strip():
-                elapsed = time.perf_counter() - unload_timer
-                remaining = SILENCE_TIMER - elapsed
-                tracker.inactivity_worker(remaining)
-                if elapsed >= SILENCE_TIMER:
-                    tts.ttsInference("Wykryłem brak aktywności. Przechodzę w tryb uśpienia. Do widzenia.")
-                    break
-                else:
-                    continue
+                print("[JARVIS]: ", end="", flush=True)
 
-            # Rozpoznanie frazy kończącej rozmowę - jeśli użytkownik pożegnał się, zakończ pętlę
-            endings = ["bywaj", "żegnaj", "koniec rozmowy", "dobranoc", "dobra noc", "kończę", "kończymy", "żegnam", "adios", "do zobaczenia"]
-            if text_result.strip(" .!?\n").lower() in endings:
-                print(f"[Użytkownik]: {text_result}")
-                byebye = ["Siemano!", "Do zobaczenia!", "Trzymaj się!", "Cześć!", "Na razie!", "Pa!", "Bywaj!", "Żegnam Pana!", "Pozdrawiam",
-                          "Do ponownego zobaczenia!", "Kłaniam się nisko!", "Do następnego!", "Pomyślności!", "Wszystkiego dobrego!", "Z fartem!"]
-                tts.ttsInference(random.choice(byebye))
-                break
+                tts.reset_stop()
 
-            print(f"\n[Użytkownik]: {text_result}")
+                # --- 3. Generowanie odpowiedzi (LLM) i równoległe odtwarzanie (TTS) ---
+                # Kolejka pośredniczy między wątkiem generującym tekst a wątkiem czytającym go na głos,
+                # dzięki czemu TTS może zacząć mówić pierwsze zdanie zanim LLM skończy całą odpowiedź.
+                tts_queue = queue.Queue()
+                t_tts = threading.Thread(target=tts_worker, args=(tts, tts_queue), daemon=True)
+                t_tts.start()
+                
+                sentence_buffer = ""
+                generator = llm.llmInference(text_result + "\nOdpowiedz krótko")
 
-            print("[JARVIS]: ", end="", flush=True)
+                # LLM zwraca tekst strumieniowo (token po tokenie). Bufor składamy w zdania -
+                # każde zakończone znakiem interpunkcyjnym (. ! ? lub nową linią) zdanie jest
+                # oczyszczane z artefaktów formatowania (Markdown, znaczniki narzędzi) i wysyłane
+                # do kolejki TTS, aby móc je odczytać zanim reszta odpowiedzi zostanie wygenerowana.
+                for token in generator:
+                    print(token, end="", flush=True)
+                    sentence_buffer += token
 
-            tts.reset_stop()
+                    if re.search(r'[.!?\n]\s*$', sentence_buffer):
+                        # Usuń ewentualne fragmenty JSON/wywołań narzędzi oraz znaczniki w nawiasach kłątkowych/ostrych
+                        clean_sentence = re.sub(r'\{.*?\}', '', sentence_buffer, flags=re.DOTALL)
+                        clean_sentence = re.sub(r'<.*?>|\[.*?\]', '', clean_sentence)
 
-            # --- 3. Generowanie odpowiedzi (LLM) i równoległe odtwarzanie (TTS) ---
-            # Kolejka pośredniczy między wątkiem generującym tekst a wątkiem czytającym go na głos,
-            # dzięki czemu TTS może zacząć mówić pierwsze zdanie zanim LLM skończy całą odpowiedź.
-            tts_queue = queue.Queue()
-            t_tts = threading.Thread(target=tts_worker, args=(tts, tts_queue), daemon=True)
-            t_tts.start()
-            
-            sentence_buffer = ""
-            generator = llm.llmInference(text_result + "\nOdpowiedz krótko")
+                        # Usuń znaczniki Markdown, których syntezator mowy nie powinien czytać na głos
+                        clean_sentence = clean_sentence.replace('**', "")
+                        clean_sentence = clean_sentence.replace('*', "")
+                        clean_sentence = clean_sentence.replace('```', "")
+                        clean_sentence = clean_sentence.replace('`', "")
 
-            # LLM zwraca tekst strumieniowo (token po tokenie). Bufor składamy w zdania -
-            # każde zakończone znakiem interpunkcyjnym (. ! ? lub nową linią) zdanie jest
-            # oczyszczane z artefaktów formatowania (Markdown, znaczniki narzędzi) i wysyłane
-            # do kolejki TTS, aby móc je odczytać zanim reszta odpowiedzi zostanie wygenerowana.
-            for token in generator:
-                print(token, end="", flush=True)
-                sentence_buffer += token
+                        if clean_sentence.strip():
+                            tts_queue.put(clean_sentence)
 
-                if re.search(r'[.!?\n]\s*$', sentence_buffer):
-                    # Usuń ewentualne fragmenty JSON/wywołań narzędzi oraz znaczniki w nawiasach kłątkowych/ostrych
+                        sentence_buffer = ""
+
+                # Ostatni, niedomknięty fragment odpowiedzi (bez końcowej interpunkcji) również trzeba przeczytać
+                if sentence_buffer.strip():
                     clean_sentence = re.sub(r'\{.*?\}', '', sentence_buffer, flags=re.DOTALL)
                     clean_sentence = re.sub(r'<.*?>|\[.*?\]', '', clean_sentence)
-
-                    # Usuń znaczniki Markdown, których syntezator mowy nie powinien czytać na głos
-                    clean_sentence = clean_sentence.replace('**', "")
-                    clean_sentence = clean_sentence.replace('*', "")
-                    clean_sentence = clean_sentence.replace('```', "")
-                    clean_sentence = clean_sentence.replace('`', "")
+                    clean_sentence = clean_sentence.replace('**', "").replace('*', "")
 
                     if clean_sentence.strip():
                         tts_queue.put(clean_sentence)
 
-                    sentence_buffer = ""
+                tts_queue.put(None)
+                print()
 
-            # Ostatni, niedomknięty fragment odpowiedzi (bez końcowej interpunkcji) również trzeba przeczytać
-            if sentence_buffer.strip():
-                clean_sentence = re.sub(r'\{.*?\}', '', sentence_buffer, flags=re.DOTALL)
-                clean_sentence = re.sub(r'<.*?>|\[.*?\]', '', clean_sentence)
-                clean_sentence = clean_sentence.replace('**', "").replace('*', "")
-
-                if clean_sentence.strip():
-                    tts_queue.put(clean_sentence)
-
-            tts_queue.put(None)
-            print()
-
-            t_tts.join()
-            unload_timer = time.perf_counter()
-            tracker = InactivityTracker()
+                t_tts.join()
+                unload_timer = time.perf_counter()
+                tracker = InactivityTracker()
+            except Exception as e:
+                logger.error(f"Wystąpił błąd: {e}", exc_info=True)
+                recorder.stop_recording()
+                if tts_queue is not None:
+                    tts.stop()
+                    tts_queue.put(None)
+                    t_tts.join()
+                continue
 
     except KeyboardInterrupt:
         # Użytkownik przerwał program (Ctrl+C) - zatrzymaj nagrywanie i odtwarzanie,
