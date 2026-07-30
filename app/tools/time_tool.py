@@ -47,11 +47,10 @@ TIME_TOOL_SCHEMA = {
 
 def godzina_slownie(godzina: int) -> str:
     """Zamienia godzinę w formacie 24-godzinnym (0-23) na jej słowną,
-    żeńską formę gramatyczną po polsku (np. 13 -> "trzynasta").
-    Uwaga: brakuje wpisu dla godziny 0 - w takim przypadku zwracana
-    jest liczba jako ciąg znaków (fallback słownika)."""
+    żeńską formę gramatyczną po polsku (np. 13 -> "trzynasta")."""
 
     HOURS_PL = {
+        0: "północ",
         1: "pierwsza",
         2: "druga",
         3: "trzecia",
