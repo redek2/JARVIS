@@ -190,7 +190,7 @@ def main():
     finally:
         # Niezależnie od sposobu zakończenia pętli - zwolnij zasoby silnika LLM
         # (np. wyładuj model z pamięci Ollamy, jeśli był używany lokalny provider).
-        if 'llm' in locals() or 'llm' in globals():
+        if 'llm' in locals():
             try:
                 llm.cleanup()
             except Exception as e:
