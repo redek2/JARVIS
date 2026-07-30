@@ -65,11 +65,13 @@ def main():
                     t = threading.Thread(target=recording_worker, args=(recorder, stream), daemon=True)
                     t.start()
 
-                    while recorder.is_recording:
-                        time.sleep(0.1)
-
-                    audio_data = recorder.stop_recording()
-                    t.join()
+                    try:
+                        while recorder.is_recording:
+                            time.sleep(0.1)
+                        audio_data = recorder.stop_recording()
+                    finally:
+                        recorder.is_recording = False
+                        t.join()
                 
                 # Brak wykrytej mowy (VAD) lub puste nagranie - zwiększ licznik ciszy i ewentualnie uśpij system
                 if not recorder.speech_started or len(audio_data) == 0:
