@@ -24,8 +24,10 @@ def open_path(path: str):
                          stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL
                          )
+        logger.info(f"Otwarto: {path}.")
         return f"Otwarto: {path}"
     else:
+        logger.error(f"Błąd: Ścieżka {path} nie istnieje.")
         return f"Błąd: Ścieżka {path} nie istnieje."
 
 # Definicja narzędzia w formacie function-calling (OpenAI-compatible),

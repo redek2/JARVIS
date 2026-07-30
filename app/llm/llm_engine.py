@@ -70,9 +70,7 @@ class LLMEngine:
             )
 
             full_response = ""
-            tool_id = None
-            tool_name = None
-            tool_args_chunks = []
+            tool_dict = {} # {"index": [id, name, arguments]}
 
             # Odczytuj kolejne "kawałki" (delty) odpowiedzi ze strumienia.
             # Model może zwracać albo zwykły tekst, albo (fragmentarycznie) wywołanie narzędzia -
@@ -81,19 +79,22 @@ class LLMEngine:
                 delta = event.choices[0].delta
 
                 if hasattr(delta, 'tool_calls') and delta.tool_calls:
-                    tc = delta.tool_calls[0]
-                    if tc.id: 
-                        tool_id = tc.id
-                    if tc.function.name: 
-                        tool_name = tc.function.name
-                    if tc.function.arguments: 
-                        tool_args_chunks.append(tc.function.arguments)
+                    for tc in delta.tool_calls:
+                        if tc.index is not None and tc.index not in tool_dict:
+                            tool_dict[tc.index] = {"id": None, "name": None, "args": []}
+                        if tc.id: 
+                            tool_dict[tc.index]["id"] = tc.id
+                        if tc.function.name: 
+                            tool_dict[tc.index]["name"] = tc.function.name
+                        if tc.function.arguments: 
+                            tool_dict[tc.index]["args"].append(tc.function.arguments)
                     continue
 
                 token = delta.content
                 if token:
                     full_response += token
                     yield token
+
         except Exception as e:
             logger.error(f"Błąd połączenia z LLM: {e}", exc_info=True)
             if self.history and self.history[-1]["role"] == "user":
@@ -103,14 +104,8 @@ class LLMEngine:
 
         # Model poprosił o wywołanie narzędzia (ustrukturyzowany tool_call) - wykonaj je
         # i przekaż wynik z powrotem do modelu, aby dokończył odpowiedź.
-        if tool_name:
-            full_arguments_str = "".join(tool_args_chunks)
-            try:
-                tool_args = json.loads(full_arguments_str or "{}")
-            except Exception:
-                tool_args = {}
-
-            yield from self._processes_and_execute_tool(tool_id or "call_01", tool_name, tool_args)
+        if tool_dict:
+            yield from self._processes_and_execute_tool(tool_dict)
             return
         
         # Zabezpieczenie awaryjne: niektóre modele (zwłaszcza mniejsze lokalne)
@@ -126,7 +121,7 @@ class LLMEngine:
 
                     if f_name:
                         yield f"\n[System: wykryto tekstowe wywołanie {f_name}]"
-                        yield from self._processes_and_execute_tool("call_01", f_name, f_args)
+                        yield from self._processes_and_execute_tool({0: {"id": "call_01", "name": f_name, "args": [json.dumps(f_args)]}})
                         return
             except Exception:
                 pass
@@ -135,36 +130,45 @@ class LLMEngine:
         if full_response:
             self.history.append({"role": "assistant", "content": full_response})
 
-    def _processes_and_execute_tool(self, tool_id, tool_name, tool_args):
+    def _processes_and_execute_tool(self, tool_dict):
         """Wykonuje wskazane narzędzie, zapisuje w historii zarówno żądanie
         wywołania (rola 'assistant' z tool_calls), jak i jego wynik (rola 'tool'),
         a następnie wysyła drugie zapytanie do modelu, aby ten sformułował
         naturalnojęzykową odpowiedź na podstawie wyniku narzędzia. Zwraca
         (yield) strumień tokenów tej końcowej odpowiedzi.
         """
-        tool_result = self.tool_manager.execute_tool(tool_name, tool_args)
+        tool_calls_list = []
+        tool_result_list = []
+
+        for tool in tool_dict:
+            full_arguments_str = "".join(tool_dict[tool]["args"])
+            try:
+                tool_args = json.loads(full_arguments_str or "{}")
+            except Exception:
+                tool_args = {}
+            tool_calls_list.append({
+                "id": tool_dict[tool]["id"],
+                "type": "function",
+                "function": {
+                    "name": tool_dict[tool]["name"],
+                    "arguments": "".join(tool_dict[tool]["args"])
+                }
+            })
+            tool_result = self.tool_manager.execute_tool(tool_dict[tool]["name"], tool_args)
+            tool_result_list.append({
+                "role": "tool",
+                "tool_call_id": tool_dict[tool]["id"],
+                "content": str(tool_result)
+            })
 
         assistant_tool_msg = {
             "role": "assistant",
             "content": None,
-            "tool_calls": [
-                {
-                    "id": tool_id,
-                    "type": "function",
-                    "function": {
-                        "name": tool_name,
-                        "arguments": json.dumps(tool_args)
-                    }
-                }
-            ]
+            "tool_calls": tool_calls_list
         }
         
         self.history.append(assistant_tool_msg)
-        self.history.append({
-            "role": "tool",
-            "tool_call_id": tool_id,
-            "content": str(tool_result)
-        })
+        self.history.extend(tool_result_list)
 
         self._trim_history()
 
