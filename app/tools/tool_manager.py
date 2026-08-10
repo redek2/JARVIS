@@ -12,6 +12,7 @@ from app.tools.date_tool import get_current_date, DATE_TOOL_SCHEMA
 from app.tools.notion_tool import search_notion_info, NOTION_TOOL_SCHEMA
 from app.tools.folder_tool import open_path, FOLDER_TOOL_SCHEMA
 from app.tools.list_dir_tool import list_directory, LIST_DIRECTORY_SCHEMA
+from app.tools.light_tool import toggle_light, LIGHT_TOOL_SCHEMA
 from app.logger import get_logger
 import logging
 
@@ -29,7 +30,8 @@ class ToolManager:
             "get_current_date": get_current_date,
             "search_notion_info": search_notion_info,
             "open_path": open_path,
-            "list_directory": list_directory
+            "list_directory": list_directory,
+            "toggle_light": toggle_light
         }
 
         # Lista schematów (opisów) narzędzi w formacie OpenAI function-calling,
@@ -39,7 +41,8 @@ class ToolManager:
             DATE_TOOL_SCHEMA,
             NOTION_TOOL_SCHEMA,
             FOLDER_TOOL_SCHEMA,
-            LIST_DIRECTORY_SCHEMA
+            LIST_DIRECTORY_SCHEMA,
+            LIGHT_TOOL_SCHEMA
         ]
 
     def execute_tool(self, name: str, arguments: dict) -> str:
