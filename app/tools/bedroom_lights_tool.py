@@ -5,7 +5,7 @@ from app.logger import get_logger
 
 logger = get_logger(__name__, level=logging.DEBUG)
 
-def toggle_light(state: str = None, brightness: int = None, color_temp: int = None, color: str = None):
+def toggle_bedroom_lights(state: str = None, brightness: int = None, color_temp: int = None, color: str = None):
     payload = {}
     if state is not None:
         payload["state"] = state.upper()
@@ -21,7 +21,7 @@ def toggle_light(state: str = None, brightness: int = None, color_temp: int = No
         return "Błąd: Nie podano żadnych parametrów do zmiany stanu światła."
 
     try:
-        publish.single(topic="zigbee2mqtt/0x006ce4a4ffce0078/set", payload=json.dumps(payload), hostname="localhost", port=1883)
+        publish.single(topic="zigbee2mqtt/lampy_sypialnia/set", payload=json.dumps(payload), hostname="localhost", port=1883)
         logger.debug(f"Published to MQTT: {payload}")
     except Exception as e:
         logger.error(f"Failed to publish to MQTT: {e}")
@@ -29,11 +29,11 @@ def toggle_light(state: str = None, brightness: int = None, color_temp: int = No
 
     return f"Ustawienia żarówki zostały zmienione: {payload}"
 
-LIGHT_TOOL_SCHEMA = {
+BEDROOM_LIGHTS_TOOL_SCHEMA = {
     "type": "function",
     "function": {
         "name": "toggle_light",
-        "description": "Steruje żarówką w sypialni/pokoju: włącza/wyłącza ją, zmienia jasność oraz temperaturę barwową. Zmiana koloru światła w formacie HEX (np. #FF5733) jest również możliwa.",
+        "description": "Steruje głównym oświetleniem sufitowym w sypialni/pokoju: włącza/wyłącza je, zmienia jasność, temperaturę barwową lub kolor HEX. Używaj przy ogólnych poleceniach typu 'włącz światło w pokoju', 'światło sufitowe', 'główne światło'.",
         "parameters": {
             "type": "object",
                 "properties": {

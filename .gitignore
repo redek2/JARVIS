@@ -36,6 +36,7 @@ env/
 *.mp3
 *.flac
 *.raw
+models/
 
 ### Systemowe (Linux)
 .directory
