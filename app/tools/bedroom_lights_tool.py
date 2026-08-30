@@ -5,7 +5,7 @@ from app.logger import get_logger
 
 logger = get_logger(__name__, level=logging.DEBUG)
 
-def toggle_bedroom_lights(state: str = None, brightness: int = None, color_temp: int = None, color: str = None):
+def toggle_main_lights(state: str = None, brightness: int = None, color_temp: int = None, color: str = None):
     payload = {}
     if state is not None:
         payload["state"] = state.upper()
@@ -29,10 +29,10 @@ def toggle_bedroom_lights(state: str = None, brightness: int = None, color_temp:
 
     return f"Ustawienia żarówki zostały zmienione: {payload}"
 
-BEDROOM_LIGHTS_TOOL_SCHEMA = {
+MAIN_LIGHTS_TOOL_SCHEMA = {
     "type": "function",
     "function": {
-        "name": "toggle_light",
+        "name": "toggle_main_lights",
         "description": "Steruje głównym oświetleniem sufitowym w sypialni/pokoju: włącza/wyłącza je, zmienia jasność, temperaturę barwową lub kolor HEX. Używaj przy ogólnych poleceniach typu 'włącz światło w pokoju', 'światło sufitowe', 'główne światło'.",
         "parameters": {
             "type": "object",
