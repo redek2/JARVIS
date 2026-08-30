@@ -13,20 +13,22 @@ Nagrywanie audio, generowanie odpowiedzi LLM i synteza mowy działają
 w osobnych wątkach, aby TTS mogło zacząć czytać pierwsze zdanie zanim
 LLM skończy generować całą odpowiedź.
 """
-import threading
-from app.audio_recorder import AudioRecorder
-from app.stt.stt_engine import STTEngine
-import sounddevice as sd
-from app.config import SAMPLE_RATE, CHANNELS, CHUNK_SIZE, SILENCE_TIMER
-from app.llm.llm_engine import LLMEngine
-from app.tts.tts_engine import TTSEngine
-from app.logger import get_logger
+
 from app.asphalt import recording_worker, tts_worker, InactivityTracker
-import time
+from app.audio_recorder import AudioRecorder
+from app.config import SAMPLE_RATE, CHANNELS, CHUNK_SIZE, SILENCE_TIMER, ENABLE_TTS
+from app.llm.llm_engine import LLMEngine
+from app.logger import get_logger
+from app.stt.stt_engine import STTEngine
+from app.tts.tts_engine import TTSEngine
+
 import numpy as np
 import queue
-import re
 import random
+import re
+import sounddevice as sd
+import threading
+import time
 
 logger = get_logger(__name__)     
 
@@ -35,11 +37,12 @@ def main():
     audio), a następnie uruchamia nieskończoną pętlę konwersacji głos-tekst-głos,
     aż do wykrycia frazy pożegnalnej, dłuższej ciszy (tryb uśpienia) lub
     przerwania z klawiatury (Ctrl+C)."""
+    sd.default.device = (1, 6)  # 1 = mikrofon USB (wejście), 6 = bluealsa / JBL (wyjście)
     try:
         recorder = AudioRecorder()
         stt = STTEngine()
         llm = LLMEngine()
-        tts = TTSEngine()
+        tts = TTSEngine() if ENABLE_TTS else None
         tracker = InactivityTracker()
     except KeyboardInterrupt:
         logger.info("Przerwano działanie programu z klawiatury.")
@@ -48,18 +51,20 @@ def main():
         logger.error(f"Wystąpił błąd podczas inicjalizacji: {e}", exc_info=True)
         return
     tts_queue = None
+    t_tts = None
 
     try:
         logger.info("System gotowy.")
         # Krótki dźwiękowy sygnał (opadający ton 440 Hz) informujący użytkownika, że system wystartował.
-        sd.play((np.linspace(0.3, 0.0, 4800, False) * np.sin(440 * np.linspace(0, 0.3, 4800, False) * 2 * np.pi)).astype(np.float32), 16000)
+        sd.play(0.2 * np.sin(2 * np.pi * 440 * np.linspace(0, 0.4, 17640, False)), 44100)
+        sd.wait()
         unload_timer = time.perf_counter()
         while True:
             try:
                 tts_queue = None
                 # --- 1. Nagrywanie ---
                 recorder.start_recording()
-                with sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS, dtype='float32', blocksize=CHUNK_SIZE) as stream:
+                with sd.InputStream(device=1, samplerate=SAMPLE_RATE, channels=CHANNELS, dtype='float32', blocksize=CHUNK_SIZE) as stream:
                     # Nagrywanie odbywa się w osobnym wątku, aby pętla główna mogła
                     # jednocześnie czekać na zakończenie wypowiedzi (recorder.is_recording == False)
                     t = threading.Thread(target=recording_worker, args=(recorder, stream), daemon=True)
@@ -79,7 +84,8 @@ def main():
                     remaining = SILENCE_TIMER - elapsed
                     tracker.inactivity_worker(remaining)
                     if elapsed >= SILENCE_TIMER:
-                        tts.ttsInference("Wykryłem brak aktywności. Przechodzę w tryb uśpienia.")
+                        if tts:
+                            tts.ttsInference("Wykryłem brak aktywności. Przechodzę w tryb uśpienia.")
                         break
                     else:
                         continue
@@ -94,7 +100,8 @@ def main():
                     remaining = SILENCE_TIMER - elapsed
                     tracker.inactivity_worker(remaining)
                     if elapsed >= SILENCE_TIMER:
-                        tts.ttsInference("Wykryłem brak aktywności. Przechodzę w tryb uśpienia. Do widzenia.")
+                        if tts:
+                            tts.ttsInference("Wykryłem brak aktywności. Przechodzę w tryb uśpienia. Do widzenia.")
                         break
                     else:
                         continue
@@ -105,21 +112,22 @@ def main():
                     print(f"[Użytkownik]: {text_result}")
                     byebye = ["Siemano!", "Do zobaczenia!", "Trzymaj się!", "Cześć!", "Na razie!", "Pa!", "Bywaj!", "Żegnam Pana!", "Pozdrawiam",
                             "Do ponownego zobaczenia!", "Kłaniam się nisko!", "Do następnego!", "Pomyślności!", "Wszystkiego dobrego!", "Z fartem!"]
-                    tts.ttsInference(random.choice(byebye))
+                    if tts:
+                        tts.ttsInference(random.choice(byebye))
                     break
 
                 print(f"\n[Użytkownik]: {text_result}")
 
                 print("[JARVIS]: ", end="", flush=True)
 
-                tts.reset_stop()
-
                 # --- 3. Generowanie odpowiedzi (LLM) i równoległe odtwarzanie (TTS) ---
                 # Kolejka pośredniczy między wątkiem generującym tekst a wątkiem czytającym go na głos,
                 # dzięki czemu TTS może zacząć mówić pierwsze zdanie zanim LLM skończy całą odpowiedź.
-                tts_queue = queue.Queue()
-                t_tts = threading.Thread(target=tts_worker, args=(tts, tts_queue), daemon=True)
-                t_tts.start()
+                if tts:
+                    tts.reset_stop()
+                    tts_queue = queue.Queue()
+                    t_tts = threading.Thread(target=tts_worker, args=(tts, tts_queue), daemon=True)
+                    t_tts.start()
                 
                 sentence_buffer = ""
                 generator = llm.llmInference(text_result + "\nOdpowiedz krótko")
@@ -143,9 +151,8 @@ def main():
                         clean_sentence = clean_sentence.replace('```', "")
                         clean_sentence = clean_sentence.replace('`', "")
 
-                        if clean_sentence.strip():
+                        if clean_sentence.strip() and tts:
                             tts_queue.put(clean_sentence)
-
                         sentence_buffer = ""
 
                 # Ostatni, niedomknięty fragment odpowiedzi (bez końcowej interpunkcji) również trzeba przeczytać
@@ -154,19 +161,20 @@ def main():
                     clean_sentence = re.sub(r'<.*?>|\[.*?\]', '', clean_sentence)
                     clean_sentence = clean_sentence.replace('**', "").replace('*', "")
 
-                    if clean_sentence.strip():
+                    if clean_sentence.strip() and tts:
                         tts_queue.put(clean_sentence)
 
-                tts_queue.put(None)
+                if tts:
+                    tts_queue.put(None)  # Sygnał zakończenia do wątku TTS
+                    t_tts.join()         # Poczekaj, aż wątek TTS skończy odtwarzanie
                 print()
 
-                t_tts.join()
                 unload_timer = time.perf_counter()
                 tracker = InactivityTracker()
             except Exception as e:
                 logger.error(f"Wystąpił błąd: {e}", exc_info=True)
                 recorder.stop_recording()
-                if tts_queue is not None:
+                if tts and tts_queue is not None:
                     tts.stop()
                     tts_queue.put(None)
                     t_tts.join()
@@ -176,15 +184,16 @@ def main():
         # Użytkownik przerwał program (Ctrl+C) - zatrzymaj nagrywanie i odtwarzanie,
         # a następnie wyczyść kolejkę TTS i poślij sygnał zakończenia do wątku TTS.
         recorder.stop_recording()
-        tts.stop()
-        if tts_queue is not None:
-            while not tts_queue.empty():
-                try:
-                    tts_queue.get_nowait()
-                    tts_queue.task_done()
-                except queue.Empty:
-                    break
-            tts_queue.put(None)
+        if tts:
+            tts.stop()
+            if tts_queue is not None:
+                while not tts_queue.empty():
+                    try:
+                        tts_queue.get_nowait()
+                        tts_queue.task_done()
+                    except queue.Empty:
+                        break
+                tts_queue.put(None)
 
         logger.info("Przerwano działanie programu z klawiatury.")
     finally:
