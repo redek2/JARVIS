@@ -13,7 +13,7 @@ import logging
 from app.tools.time_tool import get_current_time, TIME_TOOL_SCHEMA
 from app.tools.date_tool import get_current_date, DATE_TOOL_SCHEMA
 from app.tools.notion_tool import search_notion_info, NOTION_TOOL_SCHEMA
-from app.tools.folder_tool import open_path, FOLDER_TOOL_SCHEMA
+#from app.tools.folder_tool import open_path, FOLDER_TOOL_SCHEMA
 from app.tools.list_dir_tool import list_directory, LIST_DIRECTORY_SCHEMA
 from app.tools.lamp_tool import toggle_desk_lamp, DESK_LAMP_TOOL_SCHEMA
 from app.tools.bedroom_lights_tool import toggle_main_lights, MAIN_LIGHTS_TOOL_SCHEMA
@@ -35,7 +35,7 @@ class ToolManager:
             "get_current_time": get_current_time,
             "get_current_date": get_current_date,
             "search_notion_info": search_notion_info,
-            "open_path": open_path,
+            #"open_path": open_path,
             "list_directory": list_directory,
             "toggle_desk_lamp": toggle_desk_lamp,
             "toggle_main_lights": toggle_main_lights,
@@ -50,7 +50,7 @@ class ToolManager:
             TIME_TOOL_SCHEMA,
             DATE_TOOL_SCHEMA,
             NOTION_TOOL_SCHEMA,
-            FOLDER_TOOL_SCHEMA,
+            #FOLDER_TOOL_SCHEMA,
             LIST_DIRECTORY_SCHEMA,
             DESK_LAMP_TOOL_SCHEMA,
             MAIN_LIGHTS_TOOL_SCHEMA,
