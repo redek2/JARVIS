@@ -7,6 +7,9 @@ Aby dodać nowe narzędzie do systemu, należy:
 LLMEngine korzysta z `ToolManager.schemas`, aby poinformować model o dostępnych
 narzędziach, a następnie z `execute_tool`, aby faktycznie je wywołać.
 """
+from app.logger import get_logger
+import logging
+
 from app.tools.time_tool import get_current_time, TIME_TOOL_SCHEMA
 from app.tools.date_tool import get_current_date, DATE_TOOL_SCHEMA
 from app.tools.notion_tool import search_notion_info, NOTION_TOOL_SCHEMA
@@ -15,8 +18,9 @@ from app.tools.list_dir_tool import list_directory, LIST_DIRECTORY_SCHEMA
 from app.tools.lamp_tool import toggle_desk_lamp, DESK_LAMP_TOOL_SCHEMA
 from app.tools.bedroom_lights_tool import toggle_main_lights, MAIN_LIGHTS_TOOL_SCHEMA
 from app.tools.power_strip_tool import toggle_socket, POWER_STRIP_TOOL_SCHEMA
-from app.logger import get_logger
-import logging
+
+from app.protocols.night_shift_protocol import night_shift_protocol, NIGHT_SHIFT_PROTOCOL_SCHEMA
+from app.protocols.sleep_protocol import sleep_protocol, SLEEP_PROTOCOL_SCHEMA
 
 logger = get_logger(__name__, level=logging.ERROR)
 
@@ -35,7 +39,9 @@ class ToolManager:
             "list_directory": list_directory,
             "toggle_desk_lamp": toggle_desk_lamp,
             "toggle_main_lights": toggle_main_lights,
-            "toggle_socket": toggle_socket
+            "toggle_socket": toggle_socket,
+            "night_shift_protocol": night_shift_protocol,
+            "sleep_protocol": sleep_protocol
         }
 
         # Lista schematów (opisów) narzędzi w formacie OpenAI function-calling,
@@ -48,7 +54,9 @@ class ToolManager:
             LIST_DIRECTORY_SCHEMA,
             DESK_LAMP_TOOL_SCHEMA,
             MAIN_LIGHTS_TOOL_SCHEMA,
-            POWER_STRIP_TOOL_SCHEMA
+            POWER_STRIP_TOOL_SCHEMA,
+            NIGHT_SHIFT_PROTOCOL_SCHEMA,
+            SLEEP_PROTOCOL_SCHEMA
         ]
 
     def execute_tool(self, name: str, arguments: dict) -> str:
