@@ -125,7 +125,8 @@ def main():
                         tts.ttsInference(random.choice(byebye))
                     break
 
-                print(f"\n[Użytkownik]: {text_result}")
+                #print(f"\n[Użytkownik]: {text_result}")
+                logger.info(f"[Użytkownik]: {text_result.strip()}")
 
                 print("[JARVIS]: ", end="", flush=True)
 
@@ -139,6 +140,7 @@ def main():
                     t_tts.start()
                 
                 sentence_buffer = ""
+                full_response = ""
                 generator = llm.llmInference(text_result + "\nOdpowiedz krótko")
 
                 # LLM zwraca tekst strumieniowo (token po tokenie). Bufor składamy w zdania -
@@ -148,6 +150,7 @@ def main():
                 for token in generator:
                     print(token, end="", flush=True)
                     sentence_buffer += token
+                    full_response += token
 
                     if re.search(r'[.!?\n]\s*$', sentence_buffer):
                         if sentence_buffer.strip() and tts:
@@ -158,6 +161,9 @@ def main():
                 if sentence_buffer.strip():
                     if tts:
                         tts_queue.put(sentence_buffer)
+
+                if full_response.strip():
+                    logger.info(f"[JARVIS]: {full_response.strip()}")
 
                 if tts:
                     tts_queue.put(None)  # Sygnał zakończenia do wątku TTS
@@ -207,3 +213,4 @@ if __name__ == "__main__":
     main()
     end = time.perf_counter()
     logger.info(f"Czas wykonania: {end-start:.1f}s")
+    logger.info("Koniec rozmowy\n\n" + "=" * 50 + "\n")

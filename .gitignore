@@ -52,3 +52,4 @@ sounds/
 
 app/config.py
 *.save
+logs/

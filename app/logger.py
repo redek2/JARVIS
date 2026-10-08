@@ -6,6 +6,8 @@ gwarantuje, że każdy moduł wywołujący get_logger() z tą samą nazwą
 otrzyma ten sam, raz skonfigurowany obiekt loggera.
 """
 import logging
+import os
+from logging.handlers import TimedRotatingFileHandler
 from colorama import Fore, Style, init as colorama_init
 
 colorama_init(autoreset=True)  # włącza obsługę kolorów ANSI w konsoli (w tym na Windows)
@@ -37,9 +39,21 @@ def get_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     logger = logging.getLogger(name)
 
     if not logger.handlers:
-        handler = logging.StreamHandler()
-        handler.setFormatter(ColorFormatter("[%(levelname)s][%(name)s] %(message)s"))
-        logger.addHandler(handler)
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(ColorFormatter("[%(levelname)s][%(name)s] %(message)s"))
+        logger.addHandler(console_handler)
+
+        os.makedirs("logs", exist_ok=True)
+        file_handler = TimedRotatingFileHandler(
+            filename="logs/jarvis.log",
+            when="midnight",
+            interval=1,
+            backupCount=7,
+            encoding="utf-8"
+        )
+        file_handler.setFormatter(logging.Formatter("[%(asctime)s][%(levelname)s][%(name)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+        logger.addHandler(file_handler)
+
         logger.setLevel(level)
         logger.propagate = False
 
