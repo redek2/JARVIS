@@ -47,6 +47,9 @@ class AudioRecorder:
         """
         # Pobiera pojedynczą paczkę danych audio z karty dźwiękowej i odkłada do RAM
         audio_chunk, error_flag = stream.read(CHUNK_SIZE)
+        
+        if error_flag:
+            logger.warning("Wystąpił błąd podczas odczytu paczki audio z mikrofonu.")
         self.frames.append(audio_chunk)
 
         flat_audio = audio_chunk.flatten()
