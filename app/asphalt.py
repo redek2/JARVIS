@@ -1,5 +1,9 @@
 from app.config import SILENCE_TIMER
 from app.logger import get_logger
+import soundfile as sf
+import sounddevice as sd
+import threading
+import time
 
 logger = get_logger(__name__)     
 
@@ -30,6 +34,28 @@ def tts_worker(tts_engine, tts_queue):
 
         tts_engine.ttsInference(sentence)
         tts_queue.task_done()
+
+def play_loop_audio_worker(file_path: str, stop_event: threading.Event):
+    try:
+        data, fs = sf.read(file_path, dtype='float32')
+        while not stop_event.is_set():
+            sd.play(data, fs)
+            while sd.get_stream() and sd.get_stream().active:
+                if stop_event.is_set():
+                    sd.stop()
+                    break
+            time.sleep(0.05)
+    except Exception as e:
+        logger.error(f"Nie udało się odtworzyć pliku audio: {e}", exc_info=True)
+
+def play_audio_worker(file_path: str):
+    try:
+        data, fs = sf.read(file_path, dtype='float32')
+        data *= 0.15
+        sd.play(data, fs)
+        sd.wait()  # blokuje wątek do zakończenia odtwarzania dźwięku
+    except Exception as e:
+        logger.error(f"Nie udało się odtworzyć pliku audio: {e}", exc_info=True)
 
 class InactivityTracker():
     def __init__(self):

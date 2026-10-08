@@ -14,9 +14,9 @@ w osobnych wątkach, aby TTS mogło zacząć czytać pierwsze zdanie zanim
 LLM skończy generować całą odpowiedź.
 """
 
-from app.asphalt import recording_worker, tts_worker, InactivityTracker
+from app.asphalt import play_audio_worker, play_loop_audio_worker, recording_worker, tts_worker, InactivityTracker
 from app.audio_recorder import AudioRecorder
-from app.config import SAMPLE_RATE, CHANNELS, CHUNK_SIZE, SILENCE_TIMER, ENABLE_TTS
+from app.config import SAMPLE_RATE, CHANNELS, CHUNK_SIZE, SILENCE_TIMER, ENABLE_TTS, STARTUP_SOUND_PATH, READY_SOUND_PATH
 from app.llm.llm_engine import LLMEngine
 from app.logger import get_logger
 from app.stt.stt_engine import STTEngine
@@ -37,13 +37,26 @@ def main():
     audio), a następnie uruchamia nieskończoną pętlę konwersacji głos-tekst-głos,
     aż do wykrycia frazy pożegnalnej, dłuższej ciszy (tryb uśpienia) lub
     przerwania z klawiatury (Ctrl+C)."""
-    sd.default.device = (1, 6)  # 1 = mikrofon USB (wejście), 6 = bluealsa / JBL (wyjście)
+    # sd.default.device = (1, 12)
     try:
+        stop_audio_event = threading.Event()
+        t_audio = threading.Thread(target=play_loop_audio_worker, args=(STARTUP_SOUND_PATH, stop_audio_event), daemon=True)
+        t_audio.start()
+
+        logger.info("Inicjalizacja silników STT, LLM i TTS...")
+
         recorder = AudioRecorder()
         stt = STTEngine()
         llm = LLMEngine()
         tts = TTSEngine() if ENABLE_TTS else None
         tracker = InactivityTracker()
+
+        stop_audio_event.set()  # Zatrzymaj odtwarzanie dźwięku startowego po zakończeniu inicjalizacji
+        t_audio.join()  # Poczekaj, aż wątek odtwarzania dźwięku startowego zakończy się
+
+        play_audio_worker(READY_SOUND_PATH)
+
+        logger.info("System gotowy.")
     except KeyboardInterrupt:
         logger.info("Przerwano działanie programu z klawiatury.")
         return
@@ -54,17 +67,13 @@ def main():
     t_tts = None
 
     try:
-        logger.info("System gotowy.")
-        # Krótki dźwiękowy sygnał (opadający ton 440 Hz) informujący użytkownika, że system wystartował.
-        sd.play(0.2 * np.sin(2 * np.pi * 440 * np.linspace(0, 0.4, 17640, False)), 44100)
-        sd.wait()
         unload_timer = time.perf_counter()
         while True:
             try:
                 tts_queue = None
                 # --- 1. Nagrywanie ---
                 recorder.start_recording()
-                with sd.InputStream(device=1, samplerate=SAMPLE_RATE, channels=CHANNELS, dtype='float32', blocksize=CHUNK_SIZE) as stream:
+                with sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS, dtype='float32', blocksize=CHUNK_SIZE) as stream:
                     # Nagrywanie odbywa się w osobnym wątku, aby pętla główna mogła
                     # jednocześnie czekać na zakończenie wypowiedzi (recorder.is_recording == False)
                     t = threading.Thread(target=recording_worker, args=(recorder, stream), daemon=True)
@@ -107,7 +116,7 @@ def main():
                         continue
 
                 # Rozpoznanie frazy kończącej rozmowę - jeśli użytkownik pożegnał się, zakończ pętlę
-                endings = ["bywaj", "żegnaj", "koniec rozmowy", "dobranoc", "dobra noc", "kończę", "kończymy", "żegnam", "adios", "do zobaczenia"]
+                endings = ["bywaj", "żegnaj", "rzegnaj", "koniec rozmowy", "dobranoc", "dobra noc", "kończę", "kończymy", "żegnam", "adios", "do zobaczenia"]
                 if text_result.strip(" .!?\n").lower() in endings:
                     print(f"[Użytkownik]: {text_result}")
                     byebye = ["Siemano!", "Do zobaczenia!", "Trzymaj się!", "Cześć!", "Na razie!", "Pa!", "Bywaj!", "Żegnam Pana!", "Pozdrawiam",
