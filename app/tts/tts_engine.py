@@ -3,6 +3,7 @@ Moduł syntezy mowy (Text-to-Speech) oparty na silniku sherpa-onnx z modelem
 głosu VITS (Piper) wytrenowanym dla języka polskiego ("jarvis_wg_glos").
 """
 import numpy as np
+from scipy import signal
 import sherpa_onnx
 import sounddevice as sd
 import threading
@@ -47,10 +48,16 @@ class TTSEngine:
                              sid=0,
                              speed=1)
 
-        silence_padding = np.zeros(int(audio.sample_rate * 0.25), dtype=np.float32)
-        samples_with_padding = np.concatenate([audio.samples, silence_padding])
+        samples = np.array(audio.samples, dtype=np.float32)
+
+        if audio.sample_rate != 44100:
+            num_samples = int(len(samples) * 44100 / audio.sample_rate)
+            samples = signal.resample(samples, num_samples)
+
+        silence_padding = np.zeros(int(44100 * 0.25), dtype=np.float32)
+        samples_with_padding = np.concatenate([samples, silence_padding])
         
-        sd.play(samples_with_padding, samplerate=audio.sample_rate)
+        sd.play(samples_with_padding, samplerate=44100)
         sd.wait()  # blokuje wątek do zakończenia odtwarzania dźwięku
 
     def stop(self):
