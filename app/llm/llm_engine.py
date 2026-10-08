@@ -10,7 +10,7 @@ Odpowiada za:
       gdy model zwróci je jako zwykły tekst zamiast ustrukturyzowanego tool_call.
 """
 from openai import OpenAI
-from app.config import LLM_MODEL, OLLAMA_URL, SYSTEM_PROMPT, LLM_PROVIDER, LLM_TEMPERATURE, LLM_MAX_TOKENS, GROQ_BASE_URL, GROQ_MODEL, LLM_FREQUENCY_PENALTY, MAX_HISTORY_TOKENS
+from app.config import LLM_MODEL, OLLAMA_URL, SYSTEM_PROMPT, LLM_PROVIDER, LLM_TEMPERATURE, LLM_MAX_TOKENS, GROQ_BASE_URL, GROQ_MODEL, LLM_FREQUENCY_PENALTY, MAX_HISTORY_TOKENS, GEMINI_BASE_URL, GEMINI_MODEL
 import requests
 from app.tools.tool_manager import ToolManager
 import json
@@ -22,7 +22,10 @@ from app.logger import get_logger
 
 load_dotenv()
 logger = get_logger(__name__)
+
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
 class LLMEngine:
     """Otacza klienta OpenAI-compatible (Groq lub Ollama) i zarządza pełnym
     cyklem życia jednej rozmowy: historią wiadomości, strumieniowaniem
@@ -40,6 +43,11 @@ class LLMEngine:
             self.model = GROQ_MODEL
             if not GROQ_API_KEY:
                 raise RuntimeError("Brak klucza API GROQ w zmiennych środowiskowych. Upewnij się, że plik .env zawiera poprawny klucz.")
+        elif (LLM_PROVIDER == "gemini"):
+            self.client = OpenAI(base_url=GEMINI_BASE_URL, api_key=GEMINI_API_KEY)
+            self.model = GEMINI_MODEL
+            if not GEMINI_API_KEY:
+                raise RuntimeError("Brak klucza API GEMINI w zmiennych środowiskowych. Upewnij się, że plik .env zawiera poprawny klucz.")
         elif (LLM_PROVIDER == "ollama"):
             self.client = OpenAI(base_url=OLLAMA_URL, api_key="ollama-local")
             self.model = LLM_MODEL
@@ -66,7 +74,7 @@ class LLMEngine:
                 tools=self.tool_manager.schemas,
                 temperature=LLM_TEMPERATURE,
                 max_tokens=LLM_MAX_TOKENS,
-                frequency_penalty=LLM_FREQUENCY_PENALTY
+                # frequency_penalty=LLM_FREQUENCY_PENALTY
             )
 
             full_response = ""
@@ -80,14 +88,15 @@ class LLMEngine:
 
                 if hasattr(delta, 'tool_calls') and delta.tool_calls:
                     for tc in delta.tool_calls:
-                        if tc.index is not None and tc.index not in tool_dict:
-                            tool_dict[tc.index] = {"id": None, "name": None, "args": []}
+                        idx = tc.index if tc.index is not None else 0
+                        if idx not in tool_dict:
+                            tool_dict[idx] = {"id": f"call_{idx}", "name": None, "args": []}
                         if tc.id: 
-                            tool_dict[tc.index]["id"] = tc.id
-                        if tc.function.name: 
-                            tool_dict[tc.index]["name"] = tc.function.name
-                        if tc.function.arguments: 
-                            tool_dict[tc.index]["args"].append(tc.function.arguments)
+                            tool_dict[idx]["id"] = tc.id
+                        if tc.function and tc.function.name: 
+                            tool_dict[idx]["name"] = tc.function.name
+                        if tc.function and tc.function.arguments: 
+                            tool_dict[idx]["args"].append(tc.function.arguments)
                     continue
 
                 token = delta.content
@@ -181,7 +190,7 @@ class LLMEngine:
                 messages=self.history,
                 stream=True,
                 max_tokens=LLM_MAX_TOKENS,
-                frequency_penalty=LLM_FREQUENCY_PENALTY
+                # frequency_penalty=LLM_FREQUENCY_PENALTY
             )
 
             second_full_response = ""
