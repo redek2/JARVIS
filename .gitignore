@@ -37,6 +37,7 @@ env/
 *.flac
 *.raw
 models/
+sounds/
 
 ### Systemowe (Linux)
 .directory
@@ -50,3 +51,4 @@ models/
 .idea/
 
 app/config.py
+*.save
