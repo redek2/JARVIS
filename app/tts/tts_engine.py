@@ -3,6 +3,7 @@ Moduł syntezy mowy (Text-to-Speech) oparty na silniku sherpa-onnx z modelem
 głosu VITS (Piper) wytrenowanym dla języka polskiego ("jarvis_wg_glos").
 """
 import numpy as np
+import re
 from scipy import signal
 import sherpa_onnx
 import sounddevice as sd
@@ -40,7 +41,9 @@ class TTSEngine:
         if self.stop_event.is_set():
             return
 
-        if not textToRead or not textToRead.strip() or len(textToRead.strip()) <= 1:
+        textToRead = self._clean_for_tts(textToRead)
+
+        if len(textToRead) <= 1:
             return
         
         # sid=0 - identyfikator głosu (pojedynczy głos w tym modelu); speed=0.8 - lekko spowolnione tempo mówienia
@@ -69,3 +72,21 @@ class TTSEngine:
     def reset_stop(self):
         """Odblokowuje możliwość odtwarzania mowy po wcześniejszym wywołaniu `stop()`."""
         self.stop_event.clear()
+
+    def _clean_for_tts(self, text: str) -> str:
+        """Oczyszcza tekst z artefaktów formatowania, które mogą powodować problemy w syntezie mowy (Markdown, fragmenty JSON, znaczniki)."""
+        if not text:
+            return ""
+
+        # Usuń ewentualne fragmenty JSON/wywołań narzędzi {...}
+        clean_text = re.sub(r'\{.*?\}', '', text, flags=re.DOTALL)
+        # Usuń znaczniki w nawiasach kątowych i kwadratowych <...>, [...]
+        clean_text = re.sub(r'<.*?>|\[.*?\]', '', clean_text)
+        
+        # Usuń znaczniki Markdown
+        clean_text = clean_text.replace('**', "")
+        clean_text = clean_text.replace('*', "")
+        clean_text = clean_text.replace('```', "")
+        clean_text = clean_text.replace('`', "")
+        
+        return clean_text.strip()

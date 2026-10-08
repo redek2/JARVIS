@@ -150,28 +150,14 @@ def main():
                     sentence_buffer += token
 
                     if re.search(r'[.!?\n]\s*$', sentence_buffer):
-                        # Usuń ewentualne fragmenty JSON/wywołań narzędzi oraz znaczniki w nawiasach kłątkowych/ostrych
-                        clean_sentence = re.sub(r'\{.*?\}', '', sentence_buffer, flags=re.DOTALL)
-                        clean_sentence = re.sub(r'<.*?>|\[.*?\]', '', clean_sentence)
-
-                        # Usuń znaczniki Markdown, których syntezator mowy nie powinien czytać na głos
-                        clean_sentence = clean_sentence.replace('**', "")
-                        clean_sentence = clean_sentence.replace('*', "")
-                        clean_sentence = clean_sentence.replace('```', "")
-                        clean_sentence = clean_sentence.replace('`', "")
-
-                        if clean_sentence.strip() and tts:
-                            tts_queue.put(clean_sentence)
+                        if sentence_buffer.strip() and tts:
+                            tts_queue.put(sentence_buffer)
                         sentence_buffer = ""
 
                 # Ostatni, niedomknięty fragment odpowiedzi (bez końcowej interpunkcji) również trzeba przeczytać
                 if sentence_buffer.strip():
-                    clean_sentence = re.sub(r'\{.*?\}', '', sentence_buffer, flags=re.DOTALL)
-                    clean_sentence = re.sub(r'<.*?>|\[.*?\]', '', clean_sentence)
-                    clean_sentence = clean_sentence.replace('**', "").replace('*', "")
-
-                    if clean_sentence.strip() and tts:
-                        tts_queue.put(clean_sentence)
+                    if tts:
+                        tts_queue.put(sentence_buffer)
 
                 if tts:
                     tts_queue.put(None)  # Sygnał zakończenia do wątku TTS
